@@ -1,0 +1,3 @@
+{"question":"这个系统如何降低幻觉？","expected_keywords":["证据","引用","拒答"]}
+{"question":"为什么要使用 rerank？","expected_keywords":["CrossEncoder","二次排序"]}
+{"question":"系统如何处理中文关键词检索？","expected_keywords":["SQLite","FTS5","bigram"]}
