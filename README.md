@@ -462,4 +462,3 @@ python scripts/eval_retrieval.py --file eval.jsonl
 - LangSmith / OpenTelemetry 做 tracing。
 - 前端 Vue3 管理页面。
 
-对银行科技岗或 Java 后端面试来说，不需要一开始全做完。你先把当前版本跑通，并能讲清楚检索、rerank、幻觉处理，就已经很够用了。
