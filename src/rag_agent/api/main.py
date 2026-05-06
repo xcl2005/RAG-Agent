@@ -115,3 +115,14 @@ def sources() -> dict:
 
     store = SQLiteChunkStore(settings.sqlite_path)
     return {"sources": store.list_sources()}
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(
+        "rag_agent.api.main:app",
+        host="127.0.0.1",
+        port=8000,
+        reload=True,
+        app_dir="src",
+    )

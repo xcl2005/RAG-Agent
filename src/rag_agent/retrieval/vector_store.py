@@ -123,12 +123,15 @@ class QdrantVectorStore:
         query_vector = self.embed_texts([query])[0]
 
         # client.search 在很多 qdrant-client 版本里仍常用；如果新版本提示弃用，可换成 query_points。
-        hits = self.client.search(
+        result = self.client.query_points(
             collection_name=self.collection_name,
-            query_vector=query_vector,
+            query=query_vector,
             limit=limit,
             with_payload=True,
+            with_vectors=False,
         )
+
+        hits = result.points
 
         results: list[dict] = []
         for hit in hits:
