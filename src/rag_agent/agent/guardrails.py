@@ -12,7 +12,11 @@ import unicodedata
 from dataclasses import asdict, dataclass
 
 CONTROL_CHAR_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
-CITATION_RE = re.compile(r"\[S(\d+)\]")
+# The answer is normalized with NFKC before matching, so full-width forms such
+# as ``［Ｓ１］`` become their ASCII equivalents. Optional whitespace and a
+# case-insensitive ``S`` tolerate harmless formatting differences without
+# accepting arbitrary source labels.
+CITATION_RE = re.compile(r"\[\s*s\s*(\d+)\s*\]", re.IGNORECASE)
 
 # These patterns are signals, not proof of an attack. We tag the chunk and tell
 # the model to treat it as data; we do not silently delete legitimate security
@@ -66,7 +70,8 @@ def validate_citations(answer: str, source_count: int, *, abstained: bool = Fals
     was actually supplied to the model.
     """
 
-    numbers = [int(value) for value in CITATION_RE.findall(answer)]
+    normalized_answer = unicodedata.normalize("NFKC", answer)
+    numbers = [int(value) for value in CITATION_RE.findall(normalized_answer)]
     cited = list(dict.fromkeys(f"S{number}" for number in numbers))
     invalid = [f"S{number}" for number in numbers if number < 1 or number > source_count]
     invalid = list(dict.fromkeys(invalid))

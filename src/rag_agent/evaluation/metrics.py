@@ -51,6 +51,40 @@ def mean(values: Iterable[float]) -> float:
     return sum(items) / len(items) if items else 0.0
 
 
+def answerability_metrics(
+    outcomes: Iterable[tuple[bool, bool]],
+) -> dict[str, float | int]:
+    """Measure evidence-gate decisions against ``should_answer`` labels.
+
+    Each tuple is ``(expected_should_answer, predicted_should_answer)``.
+    Separating false refusals from false answers is important for RAG systems:
+    lowering one error rate can easily increase the other.
+    """
+
+    pairs = list(outcomes)
+    true_positive = sum(expected and predicted for expected, predicted in pairs)
+    true_negative = sum(not expected and not predicted for expected, predicted in pairs)
+    false_positive = sum(not expected and predicted for expected, predicted in pairs)
+    false_negative = sum(expected and not predicted for expected, predicted in pairs)
+
+    def ratio(numerator: int, denominator: int) -> float:
+        return round(numerator / denominator, 6) if denominator else 0.0
+
+    return {
+        "labeled_cases": len(pairs),
+        "true_answer": true_positive,
+        "true_refusal": true_negative,
+        "false_answer": false_positive,
+        "false_refusal": false_negative,
+        "answer_precision": ratio(true_positive, true_positive + false_positive),
+        "answer_recall": ratio(true_positive, true_positive + false_negative),
+        "refusal_precision": ratio(true_negative, true_negative + false_negative),
+        "refusal_recall": ratio(true_negative, true_negative + false_positive),
+        "false_answer_rate": ratio(false_positive, true_negative + false_positive),
+        "false_refusal_rate": ratio(false_negative, true_positive + false_negative),
+    }
+
+
 def aggregate_rankings(
     rankings: list[tuple[list[str], set[str]]],
     *,

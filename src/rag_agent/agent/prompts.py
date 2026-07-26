@@ -50,6 +50,10 @@ REPAIR_PROMPT = """原答案：
 """
 
 ABSTAIN_MESSAGE = "根据当前资料无法确认。系统未检索到足够相关且可验证的证据，因此不应编造答案。"
+GENERATION_FAILURE_MESSAGE = "已检索到相关资料，但模型未能生成有效答案。请重试，或检查模型连接与输出配置。"
+CITATION_FAILURE_MESSAGE = (
+    "已检索到相关资料，但生成结果的引用未通过校验。为避免展示无法核验的结论，本次未返回答案。"
+)
 
 
 @dataclass(slots=True)

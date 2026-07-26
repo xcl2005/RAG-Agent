@@ -29,8 +29,9 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from rag_agent.agent.graph import assess_evidence
 from rag_agent.config import settings
-from rag_agent.evaluation.metrics import aggregate_rankings
+from rag_agent.evaluation.metrics import aggregate_rankings, answerability_metrics
 from rag_agent.retrieval.hybrid import HybridRetriever
 
 
@@ -84,6 +85,7 @@ def percentile(values: list[float], ratio: float) -> float:
 
 def render_markdown(report: dict[str, Any]) -> str:
     metrics = report["metrics"]
+    answerability = report["answerability"]
     lines = [
         "# Retrieval Evaluation Report",
         "",
@@ -101,6 +103,19 @@ def render_markdown(report: dict[str, Any]) -> str:
     lines.extend(
         [
             "",
+            "## Evidence gate",
+            "",
+            "| Metric | Value |",
+            "|---|---:|",
+        ]
+    )
+    lines.extend(
+        f"| {name} | {value if isinstance(value, int) else f'{value:.4f}'} |"
+        for name, value in answerability.items()
+    )
+    lines.extend(
+        [
+            "",
             "## Latency",
             "",
             f"- mean: `{report['latency_ms']['mean']:.2f} ms`",
@@ -109,12 +124,17 @@ def render_markdown(report: dict[str, Any]) -> str:
             "",
             "## Per-case",
             "",
-            "| ID | Results | Latency |",
-            "|---|---:|---:|",
+            "| ID | Expected | Gate | Results | Latency |",
+            "|---|---|---|---:|---:|",
         ]
     )
     lines.extend(
-        f"| {case['id']} | {case['result_count']} | {case['latency_ms']:.2f} ms |" for case in report["cases"]
+        (
+            f"| {case['id']} | {case['should_answer']} | "
+            f"{case['gate_should_answer']} | {case['result_count']} | "
+            f"{case['latency_ms']:.2f} ms |"
+        )
+        for case in report["cases"]
     )
     return "\n".join(lines) + "\n"
 
@@ -132,6 +152,7 @@ def main() -> None:
     cases = load_cases(Path(args.file))
     retriever = HybridRetriever(settings)
     rankings: list[tuple[list[str], set[str]]] = []
+    answerability_outcomes: list[tuple[bool, bool]] = []
     case_reports: list[dict[str, Any]] = []
     latencies: list[float] = []
 
@@ -141,6 +162,10 @@ def main() -> None:
             candidates = retriever.retrieve(case["question"])
             latency_ms = (time.perf_counter() - started) * 1000
             latencies.append(latency_ms)
+            assessment = assess_evidence(candidates, settings)
+            expected_should_answer = case.get("should_answer")
+            if isinstance(expected_should_answer, bool):
+                answerability_outcomes.append((expected_should_answer, assessment.sufficient))
 
             ranked_labels: list[str] = []
             for candidate in candidates:
@@ -155,6 +180,9 @@ def main() -> None:
                     "id": case.get("id", f"case-{index:03d}"),
                     "question": case["question"],
                     "tags": case.get("tags", []),
+                    "should_answer": expected_should_answer,
+                    "gate_should_answer": assessment.sufficient,
+                    "gate_reason": assessment.reason,
                     "result_count": len(candidates),
                     "latency_ms": round(latency_ms, 2),
                     "top_sources": [candidate.metadata.get("source") for candidate in candidates[:3]],
@@ -167,6 +195,7 @@ def main() -> None:
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "case_count": len(cases),
         "metrics": aggregate_rankings(rankings),
+        "answerability": answerability_metrics(answerability_outcomes),
         "latency_ms": {
             "mean": round(statistics.fmean(latencies), 2) if latencies else 0.0,
             "p50": round(percentile(latencies, 0.5), 2),
@@ -180,6 +209,9 @@ def main() -> None:
             "sparse_top_k": settings.sparse_top_k,
             "fusion_top_k": settings.fusion_top_k,
             "rerank_top_k": settings.rerank_top_k,
+            "min_rerank_relevance": settings.min_rerank_relevance,
+            "min_dense_relevance": settings.min_dense_relevance,
+            "min_sparse_coverage": settings.min_sparse_coverage,
         },
         "cases": case_reports,
     }
@@ -190,7 +222,16 @@ def main() -> None:
     markdown_path = output_dir / "retrieval-eval.md"
     json_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     markdown_path.write_text(render_markdown(report), encoding="utf-8")
-    print(json.dumps(report["metrics"], ensure_ascii=False, indent=2))
+    print(
+        json.dumps(
+            {
+                "ranking": report["metrics"],
+                "answerability": report["answerability"],
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
     print(f"wrote {json_path} and {markdown_path}")
 
 

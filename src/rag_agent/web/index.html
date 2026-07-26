@@ -9,7 +9,7 @@
     />
     <meta name="theme-color" content="#f6f8fc" />
     <title>Adaptive RAG · Evidence Workbench</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260727" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260727.2" />
   </head>
   <body>
     <button
@@ -93,11 +93,47 @@
               </div>
               <div class="heading-actions">
                 <span id="sourceCount" class="count-badge">0</span>
+                <button
+                  id="manageSources"
+                  class="library-manage"
+                  type="button"
+                  aria-pressed="false"
+                  disabled
+                >
+                  管理
+                </button>
                 <button id="refreshSources" class="icon-button" type="button" title="刷新来源" aria-label="刷新来源">
                   ↻
                 </button>
               </div>
             </header>
+            <div
+              id="sourceBulkToolbar"
+              class="source-bulk-toolbar"
+              role="toolbar"
+              aria-label="批量管理资料"
+              hidden
+            >
+              <button
+                id="selectAllSources"
+                class="bulk-select-all"
+                type="button"
+                aria-pressed="false"
+              >
+                全选
+              </button>
+              <span id="selectedSourceCount" class="bulk-selection-count" aria-live="polite">
+                已选 0
+              </span>
+              <button
+                id="deleteSelectedSources"
+                class="bulk-delete"
+                type="button"
+                disabled
+              >
+                删除所选
+              </button>
+            </div>
             <div
               id="sourceActionStatus"
               class="source-action-status"
@@ -322,7 +358,7 @@
           <span class="dialog-kicker">从资料库移除</span>
           <h2 id="deleteDialogTitle">删除这份资料？</h2>
           <p>
-            “<strong id="deleteSourceName"></strong>”的文本索引、向量和受管上传文件会一并删除。
+            <strong id="deleteSourceName"></strong>的文本索引、向量和受管上传文件会一并删除。
             此操作无法撤销。
           </p>
           <div id="deleteSourceMeta" class="delete-source-meta"></div>
@@ -360,7 +396,7 @@
       </article>
     </template>
 
-    <script src="/static/ui_helpers.js?v=20260727" defer></script>
-    <script src="/static/app.js?v=20260727" defer></script>
+    <script src="/static/ui_helpers.js?v=20260727.2" defer></script>
+    <script src="/static/app.js?v=20260727.2" defer></script>
   </body>
 </html>

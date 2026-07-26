@@ -16,17 +16,18 @@ SQLite 与 Qdrant 缺少文档版本管理，上传和本地路径接口也没�
 
 - 自适应 LangGraph：弱证据时最多重试一次检索，引用失败时最多修复一次，杜绝无限循环。
 - 持久化会话：SQLite checkpointer + `thread_id`，支持多轮问题中的上下文继承。
-- 现代模型接口：默认使用 OpenAI Responses API；兼容只支持 Chat Completions 的第三方服务。
+- 现代模型接口：默认使用 OpenAI Responses API；兼容只支持 Chat Completions 的第三方服务，
+  可显式控制推理模型 thinking，并诊断空正文或 token 截断。
 - 多查询 Hybrid Retrieval：保留原始问题，再加入受控改写；Dense 与 FTS5 结果通过加权 RRF 融合。
-- 分数语义分离：RRF 只用于排序；证据门控使用 reranker 固定归一化分数、
-  dense cosine 或 sparse token coverage，不把排名第一误当作绝对相关。
+- 分数语义分离：RRF 只用于排序；证据门控以 reranker 固定归一化分数、
+  dense cosine、sparse token coverage 三路绝对信号做可解释判定，不让单一路径一票否决。
 - 可验证引用：模型只能引用本轮实际进入上下文的 `[S1]`、`[S2]`；服务端会解析、校验和修复。
 - Prompt Injection 防护：检索文本作为转义后的不可信数据传入，并在来源中暴露风险标签。
 - 幂等增量入库：文档内容哈希、manifest、按文档原子替换、旧向量清理和逐文件失败隔离。
 - 安全 API：聊天可选共享密钥、上传强制显式密钥、限定导入根目录、文件数量/大小限制、
   流式落盘、扩展名与 magic 校验。
 - 可观测输出：`trace_id`、节点级耗时、查询策略、分数明细、模型调用与 token 使用量。
-- 可运行产品界面：零构建浅色文档工作台，支持原始文件名展示、上传与安全删除、
+- 可运行产品界面：零构建浅色文档工作台，支持原始文件名展示、上传、多选批量安全删除、
   SSE 节点进度、引用定位、运行追踪、请求中止和移动端抽屉。
 - 可互操作接口：只读 MCP 工具 `search_knowledge_base` 与 `ask_knowledge_base`。
 - 工程门禁：Docker、GitHub Actions、Ruff、pytest、coverage、pre-commit 和离线检索评测。
@@ -156,6 +157,13 @@ API_ACCESS_KEY=choose-a-local-secret
 LLM_API_MODE=chat_completions
 OPENAI_BASE_URL=https://your-provider.example/v1
 CHAT_MODEL=your-model
+```
+
+使用默认开启推理的兼容模型（例如 GLM-5.2）时，RAG 的结构化规划和短答案通常应关闭 thinking，
+避免推理 token 耗尽正文预算：
+
+```dotenv
+LLM_THINKING_MODE=disabled
 ```
 
 ### 2. 启动 Qdrant
@@ -301,7 +309,8 @@ MCP 是这个知识库的互操作接口，不替代 LangGraph 工作流。服�
 .\.venv\Scripts\pytest --cov=rag_agent --cov-report=term-missing
 ```
 
-离线检索评测使用仓库内 JSONL 数据集，输出 Recall@K、MRR、nDCG 与延迟报告：
+离线检索评测使用仓库内 JSONL 数据集，输出 Recall@K、MRR、nDCG、证据门控误拒答率、
+错误放行率与延迟报告：
 
 ```powershell
 .\.venv\Scripts\python scripts/eval_retrieval.py `

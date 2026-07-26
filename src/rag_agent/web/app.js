@@ -12,6 +12,11 @@ const REQUIRED_IDS = [
   "sourceRegistry",
   "sourceCount",
   "sourceActionStatus",
+  "manageSources",
+  "sourceBulkToolbar",
+  "selectAllSources",
+  "selectedSourceCount",
+  "deleteSelectedSources",
   "apiKey",
   "toggleApiKey",
   "connectionSettings",
@@ -34,6 +39,7 @@ const REQUIRED_IDS = [
   "evidenceInspector",
   "traceInspector",
   "deleteSourceDialog",
+  "deleteDialogTitle",
   "deleteSourceName",
   "deleteSourceMeta",
   "deleteSourceStatus",
@@ -46,6 +52,7 @@ if (!window.RagUiHelpers) {
 }
 const {
   basename,
+  batchDeletionOutcome,
   deletionOutcome,
   overlayInertState,
   sourceDisplayName,
@@ -86,7 +93,11 @@ const state = {
   uploadController: null,
   deletingSources: new Set(),
   pendingDelete: null,
+  sourceRecords: new Map(),
+  sourceSelectionMode: false,
+  selectedSources: new Set(),
   sourceRefreshGeneration: 0,
+  sourceStatusTimer: null,
   uploadLimits: {
     maxFiles: 10,
     maxFileBytes: 20 * 1024 * 1024,
@@ -317,84 +328,204 @@ async function loadCapabilities() {
   }
 }
 
+function deletableSourceRecords() {
+  return [...state.sourceRecords.values()].filter(
+    (source) => source.documentId && source.deletable,
+  );
+}
+
+function syncSourceSelectionControls() {
+  const deletable = deletableSourceRecords();
+  const deletableIds = new Set(deletable.map((source) => source.documentId));
+  for (const documentId of state.selectedSources) {
+    if (!deletableIds.has(documentId)) state.selectedSources.delete(documentId);
+  }
+
+  const selectedCount = state.selectedSources.size;
+  const allSelected = deletable.length > 0 && selectedCount === deletable.length;
+  refs.manageSources.disabled = deletable.length === 0 && !state.sourceSelectionMode;
+  refs.manageSources.textContent = state.sourceSelectionMode ? "完成" : "管理";
+  refs.manageSources.setAttribute("aria-pressed", String(state.sourceSelectionMode));
+  refs.sourceBulkToolbar.hidden = !state.sourceSelectionMode;
+  refs.selectAllSources.disabled = deletable.length === 0;
+  refs.selectAllSources.textContent = allSelected ? "取消全选" : "全选";
+  refs.selectAllSources.setAttribute("aria-pressed", String(allSelected));
+  refs.selectedSourceCount.textContent = `已选 ${selectedCount}`;
+  refs.deleteSelectedSources.disabled = selectedCount === 0;
+  refs.deleteSelectedSources.textContent =
+    selectedCount > 0 ? `删除所选 (${selectedCount})` : "删除所选";
+}
+
+function renderSourceRegistry() {
+  const container = refs.sourceRegistry;
+  const sources = [...state.sourceRecords.values()];
+  refs.sourceCount.textContent = String(sources.length);
+  container.className =
+    `source-registry${state.sourceSelectionMode ? " is-selecting" : ""}`;
+  container.innerHTML =
+    sources.length === 0
+      ? '<span class="muted">尚未建立索引</span>'
+      : sources
+          .map((source) => {
+            const type = extension(source.source || source.displayName).slice(0, 4).toUpperCase();
+            const deleting = state.deletingSources.has(source.documentId);
+            const selected = state.selectedSources.has(source.documentId);
+            const selector = source.deletable
+              ? `<label class="source-selector" title="选择 ${escapeHtml(source.displayName)}">
+                   <input
+                     type="checkbox"
+                     data-select-source="${escapeHtml(source.documentId)}"
+                     aria-label="选择 ${escapeHtml(source.displayName)}"
+                     ${selected ? "checked" : ""}
+                     ${deleting ? "disabled" : ""}
+                   />
+                   <span class="source-select-mark" aria-hidden="true">✓</span>
+                 </label>`
+              : '<span class="source-selector-placeholder" aria-hidden="true"></span>';
+            return `
+              <article
+                class="registry-item${deleting ? " is-deleting" : ""}${selected ? " is-selected" : ""}"
+                data-document-id="${escapeHtml(source.documentId)}"
+              >
+                ${selector}
+                <span class="file-type">${escapeHtml(type)}</span>
+                <div class="registry-copy">
+                  <strong title="${escapeHtml(source.displayName)}">${escapeHtml(source.displayName)}</strong>
+                  <span>${source.chunkCount} 个分块 · ${escapeHtml(sourceStatus(source.status))}</span>
+                </div>
+                ${
+                  source.deletable
+                    ? `<button
+                         class="source-delete"
+                         type="button"
+                         data-delete-source="${escapeHtml(source.documentId)}"
+                         data-display-name="${escapeHtml(source.displayName)}"
+                         data-chunk-count="${source.chunkCount}"
+                         aria-label="删除 ${escapeHtml(source.displayName)}"
+                         title="从知识库删除"
+                         ${deleting ? "disabled" : ""}
+                       >
+                         <svg viewBox="0 0 24 24" aria-hidden="true">
+                           <path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13M10 11v5m4-5v5" />
+                         </svg>
+                       </button>`
+                    : ""
+                }
+              </article>`;
+          })
+          .join("");
+  syncSourceSelectionControls();
+}
+
+function setSourceSelectionMode(active, { focusManage = false } = {}) {
+  if (active && deletableSourceRecords().length === 0) return;
+  state.sourceSelectionMode = Boolean(active);
+  if (!state.sourceSelectionMode) state.selectedSources.clear();
+  renderSourceRegistry();
+  if (focusManage) refs.manageSources.focus();
+}
+
+function toggleAllSources() {
+  const ids = deletableSourceRecords().map((source) => source.documentId);
+  const allSelected = ids.length > 0 && ids.every((documentId) =>
+    state.selectedSources.has(documentId),
+  );
+  state.selectedSources = new Set(allSelected ? [] : ids);
+  renderSourceRegistry();
+  refs.selectAllSources.focus();
+}
+
 async function refreshSources() {
   const generation = ++state.sourceRefreshGeneration;
   const container = refs.sourceRegistry;
-  container.className = "source-registry muted";
+  container.className =
+    `source-registry muted${state.sourceSelectionMode ? " is-selecting" : ""}`;
   container.textContent = "正在读取资料库…";
   try {
     const response = await fetch("/api/v1/sources", { headers: headers() });
     const body = await responseBody(response);
     if (generation !== state.sourceRefreshGeneration) return;
     if (!response.ok) throw friendlyHttpError(response.status, body.detail);
-    const sources = body.sources || [];
-    refs.sourceCount.textContent = String(sources.length);
-    container.className = "source-registry";
-    container.innerHTML =
-      sources.length === 0
-        ? '<span class="muted">尚未建立索引</span>'
-        : sources
-            .map((source) => {
-              const type = extension(source.source).slice(0, 4).toUpperCase();
-              const displayName = sourceDisplayName(source);
-              const documentId = String(source.document_id || "");
-              const deleting = state.deletingSources.has(documentId);
-              return `
-                <article class="registry-item${deleting ? " is-deleting" : ""}" data-document-id="${escapeHtml(documentId)}">
-                  <span class="file-type">${escapeHtml(type)}</span>
-                  <div class="registry-copy">
-                    <strong title="${escapeHtml(displayName)}">${escapeHtml(displayName)}</strong>
-                    <span>${Number(source.chunk_count || 0)} 个分块 · ${escapeHtml(sourceStatus(source.status))}</span>
-                  </div>
-                  ${
-                    documentId && source.deletable !== false
-                      ? `<button
-                           class="source-delete"
-                           type="button"
-                           data-delete-source="${escapeHtml(documentId)}"
-                           data-display-name="${escapeHtml(displayName)}"
-                           data-chunk-count="${Number(source.chunk_count || 0)}"
-                           aria-label="删除 ${escapeHtml(displayName)}"
-                           title="从知识库删除"
-                           ${deleting ? "disabled" : ""}
-                         >
-                           <svg viewBox="0 0 24 24" aria-hidden="true">
-                             <path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13M10 11v5m4-5v5" />
-                           </svg>
-                         </button>`
-                      : ""
-                  }
-                </article>`;
-            })
-            .join("");
+    const sources = Array.isArray(body.sources) ? body.sources : [];
+    state.sourceRecords = new Map(
+      sources.map((source) => {
+        const documentId = String(source.document_id || "");
+        return [
+          documentId,
+          {
+            ...source,
+            documentId,
+            displayName: sourceDisplayName(source),
+            chunkCount: Number(source.chunk_count || 0),
+            deletable: Boolean(documentId && source.deletable !== false),
+          },
+        ];
+      }),
+    );
+    if (state.sourceRecords.size === 0) {
+      state.sourceSelectionMode = false;
+      state.selectedSources.clear();
+    }
+    renderSourceRegistry();
   } catch (error) {
     if (generation !== state.sourceRefreshGeneration) return;
     if (error.code === "local_auth") revealApiKeySettings();
     refs.sourceCount.textContent = "—";
-    container.className = "source-registry muted";
+    container.className =
+      `source-registry muted${state.sourceSelectionMode ? " is-selecting" : ""}`;
     container.textContent = error.message;
+    syncSourceSelectionControls();
   }
+}
+
+function openDeleteDialogForItems(items, opener, { batch = false } = {}) {
+  const pendingItems = items.filter(
+    (item) => item.documentId && !state.deletingSources.has(item.documentId),
+  );
+  if (pendingItems.length === 0) return;
+  state.pendingDelete = {
+    items: pendingItems,
+    opener,
+    batch,
+    deleting: false,
+  };
+  const itemCount = pendingItems.length;
+  const totalChunks = pendingItems.reduce((total, item) => total + item.chunkCount, 0);
+  refs.deleteDialogTitle.textContent =
+    itemCount === 1 ? "删除这份资料？" : `删除所选 ${itemCount} 份资料？`;
+  refs.deleteSourceName.textContent =
+    itemCount === 1 ? `“${pendingItems[0].displayName}”` : `所选 ${itemCount} 份资料`;
+  refs.deleteSourceMeta.textContent =
+    `${itemCount} 份资料 · ${totalChunks} 个文本分块 · 受管上传文件`;
+  refs.deleteSourceStatus.className = "dialog-status";
+  refs.deleteSourceStatus.textContent = "";
+  refs.cancelDeleteSource.disabled = false;
+  refs.confirmDeleteSource.disabled = false;
+  refs.confirmDeleteSource.textContent =
+    itemCount === 1 ? "删除资料" : `删除 ${itemCount} 份资料`;
+  refs.deleteSourceDialog.showModal();
+  window.requestAnimationFrame(() => refs.cancelDeleteSource.focus());
 }
 
 function openDeleteDialog(button) {
   const documentId = button.dataset.deleteSource;
   const displayName = button.dataset.displayName || "该文档";
   if (!documentId || state.deletingSources.has(documentId)) return;
-  state.pendingDelete = {
-    documentId,
-    displayName,
-    chunkCount: Number(button.dataset.chunkCount || 0),
-    opener: button,
-  };
-  refs.deleteSourceName.textContent = displayName;
-  refs.deleteSourceMeta.textContent =
-    `${state.pendingDelete.chunkCount} 个文本分块 · 受管上传文件`;
-  refs.deleteSourceStatus.textContent = "";
-  refs.cancelDeleteSource.disabled = false;
-  refs.confirmDeleteSource.disabled = false;
-  refs.confirmDeleteSource.textContent = "删除资料";
-  refs.deleteSourceDialog.showModal();
-  window.requestAnimationFrame(() => refs.cancelDeleteSource.focus());
+  openDeleteDialogForItems(
+    [{
+      documentId,
+      displayName,
+      chunkCount: Number(button.dataset.chunkCount || 0),
+    }],
+    button,
+  );
+}
+
+function openBatchDeleteDialog() {
+  const items = [...state.selectedSources]
+    .map((documentId) => state.sourceRecords.get(documentId))
+    .filter(Boolean);
+  openDeleteDialogForItems(items, refs.deleteSelectedSources, { batch: true });
 }
 
 function closeDeleteDialog() {
@@ -402,72 +533,122 @@ function closeDeleteDialog() {
   refs.deleteSourceDialog.close();
 }
 
-function setSourceActionStatus({ tone = "neutral", assertive = false, message = "" }) {
+function setSourceActionStatus({
+  tone = "neutral",
+  assertive = false,
+  message = "",
+  clearAfterMs = 0,
+}) {
+  if (state.sourceStatusTimer) {
+    window.clearTimeout(state.sourceStatusTimer);
+    state.sourceStatusTimer = null;
+  }
   refs.sourceActionStatus.className =
     `source-action-status${tone === "neutral" ? "" : ` source-action-${tone}`}`;
   refs.sourceActionStatus.setAttribute("role", assertive ? "alert" : "status");
   refs.sourceActionStatus.setAttribute("aria-live", assertive ? "assertive" : "polite");
   refs.sourceActionStatus.textContent = message;
+  if (message && clearAfterMs > 0) {
+    state.sourceStatusTimer = window.setTimeout(() => {
+      refs.sourceActionStatus.textContent = "";
+      refs.sourceActionStatus.className = "source-action-status";
+      state.sourceStatusTimer = null;
+    }, clearAfterMs);
+  }
+}
+
+async function requestSourceDeletion(item) {
+  const response = await fetch(`/api/v1/sources/${encodeURIComponent(item.documentId)}`, {
+    method: "DELETE",
+    headers: headers(),
+  });
+  const body = await responseBody(response);
+  if (response.status === 404) return { missing: true, cleanupDeferred: [] };
+  if (!response.ok) throw friendlyHttpError(response.status, body.detail, "delete");
+  return {
+    missing: false,
+    cleanupDeferred: Array.isArray(body.cleanup_deferred) ? body.cleanup_deferred : [],
+  };
 }
 
 async function deletePendingSource() {
   const pending = state.pendingDelete;
-  if (!pending || pending.deleting || state.deletingSources.has(pending.documentId)) return;
+  if (!pending || pending.deleting || pending.items.length === 0) return;
   pending.deleting = true;
-  const { documentId, displayName, opener } = pending;
+  const { items, opener } = pending;
 
-  state.deletingSources.add(documentId);
-  opener.disabled = true;
-  opener.closest(".registry-item")?.classList.add("is-deleting");
+  for (const item of items) state.deletingSources.add(item.documentId);
+  if (opener instanceof HTMLButtonElement) opener.disabled = true;
+  renderSourceRegistry();
   refs.cancelDeleteSource.disabled = true;
   refs.confirmDeleteSource.disabled = true;
   refs.confirmDeleteSource.textContent = "正在删除…";
   refs.deleteSourceStatus.className = "dialog-status";
-  refs.deleteSourceStatus.textContent = "正在清理文本索引、向量与上传文件…";
-  setSourceActionStatus({ message: `正在删除 ${displayName}…` });
+  setSourceActionStatus({ message: `正在删除 0 / ${items.length}…` });
 
-  try {
-    const response = await fetch(`/api/v1/sources/${encodeURIComponent(documentId)}`, {
-      method: "DELETE",
-      headers: headers(),
-    });
-    const body = await responseBody(response);
-    if (response.status === 404) {
-      setSourceActionStatus(deletionOutcome(displayName, [], true));
-      await refreshSources();
-      refs.deleteSourceDialog.close();
-      return;
-    }
-    if (!response.ok) throw friendlyHttpError(response.status, body.detail, "delete");
+  let deletedCount = 0;
+  let missingCount = 0;
+  const cleanupDeferred = [];
+  const failures = [];
+  let authError = null;
 
-    const deferred = body.cleanup_deferred || [];
-    setSourceActionStatus(deletionOutcome(displayName, deferred));
-    await Promise.all([refreshSources(), checkHealth()]);
-    refs.deleteSourceDialog.close();
-  } catch (error) {
-    if (error.code === "local_auth") {
-      refs.deleteSourceDialog.close();
-      revealApiKeySettings({ focus: true, openDrawer: true });
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index];
+    const progress = `正在删除 ${index + 1} / ${items.length}…`;
+    refs.deleteSourceStatus.textContent = `${progress} 正在清理索引与上传文件。`;
+    setSourceActionStatus({ message: progress });
+    try {
+      const result = await requestSourceDeletion(item);
+      if (result.missing) {
+        missingCount += 1;
+      } else {
+        deletedCount += 1;
+        cleanupDeferred.push(...result.cleanupDeferred);
+      }
+    } catch (error) {
+      failures.push({ item, error });
+      if (error.code === "local_auth") {
+        authError = error;
+        for (const unattempted of items.slice(index + 1)) {
+          failures.push({ item: unattempted, error });
+        }
+        break;
+      }
     }
-    refs.deleteSourceStatus.className = "dialog-status dialog-error";
-    refs.deleteSourceStatus.textContent = `删除失败：${error.message}`;
-    setSourceActionStatus({
-      tone: "error",
-      assertive: true,
-      message: `删除失败：${error.message}`,
-    });
-  } finally {
-    state.deletingSources.delete(documentId);
-    pending.deleting = false;
-    if (opener.isConnected) {
-      opener.disabled = false;
-      opener.closest(".registry-item")?.classList.remove("is-deleting");
-    }
-    if (refs.deleteSourceDialog.open) {
-      refs.cancelDeleteSource.disabled = false;
-      refs.confirmDeleteSource.disabled = false;
-      refs.confirmDeleteSource.textContent = "重新删除";
-    }
+  }
+
+  const failedIds = new Set(failures.map(({ item }) => item.documentId));
+  for (const item of items) {
+    state.deletingSources.delete(item.documentId);
+    if (!failedIds.has(item.documentId)) state.selectedSources.delete(item.documentId);
+  }
+  if (pending.batch) {
+    state.sourceSelectionMode = failures.length > 0;
+    state.selectedSources = new Set(failures.map(({ item }) => item.documentId));
+  }
+
+  if (deletedCount + missingCount > 0) {
+    await refreshSources();
+    if (deletedCount > 0) await checkHealth();
+  } else {
+    renderSourceRegistry();
+  }
+
+  const outcome =
+    failures.length === 0 && items.length === 1
+      ? deletionOutcome(items[0].displayName, cleanupDeferred, missingCount === 1)
+      : batchDeletionOutcome({
+          deletedCount,
+          missingCount,
+          failedCount: failures.length,
+          cleanupDeferred,
+        });
+  setSourceActionStatus(outcome);
+  pending.deleting = false;
+  if (refs.deleteSourceDialog.open) refs.deleteSourceDialog.close();
+
+  if (authError) {
+    revealApiKeySettings({ focus: true, openDrawer: true });
   }
 }
 
@@ -656,9 +837,18 @@ function renderAnswer(body) {
   const article = fragment.querySelector("article");
   const statusBadge = fragment.querySelector(".answer-status");
   const isError = body.status === "error";
+  const failureKind = String(body.failure_kind || "");
   const sources = body.sources || [];
 
-  if (isError) {
+  if (failureKind === "generation_failure") {
+    statusBadge.textContent = "模型生成失败";
+    statusBadge.className = "answer-status badge badge-error";
+    article.setAttribute("role", "alert");
+  } else if (failureKind === "citation_failure") {
+    statusBadge.textContent = "引用校验失败";
+    statusBadge.className = "answer-status badge badge-error";
+    article.setAttribute("role", "alert");
+  } else if (isError) {
     statusBadge.textContent = "请求失败";
     statusBadge.className = "answer-status badge badge-error";
     article.setAttribute("role", "alert");
@@ -1090,6 +1280,8 @@ document.addEventListener("keydown", (event) => {
       closeInspector();
     } else if (document.body.classList.contains("sidebar-open")) {
       closeSidebar();
+    } else if (state.sourceSelectionMode) {
+      setSourceSelectionMode(false, { focusManage: true });
     }
   }
 });
@@ -1123,9 +1315,27 @@ inspectorTabs.forEach((button) => {
 });
 
 refs.refreshSources.addEventListener("click", refreshSources);
+refs.manageSources.addEventListener("click", () => {
+  setSourceSelectionMode(!state.sourceSelectionMode, { focusManage: true });
+});
+refs.selectAllSources.addEventListener("click", toggleAllSources);
+refs.deleteSelectedSources.addEventListener("click", openBatchDeleteDialog);
 refs.sourceRegistry.addEventListener("click", (event) => {
   const button = event.target.closest("[data-delete-source]");
   if (button) openDeleteDialog(button);
+});
+refs.sourceRegistry.addEventListener("change", (event) => {
+  const checkbox = event.target.closest("[data-select-source]");
+  if (!(checkbox instanceof HTMLInputElement)) return;
+  const documentId = checkbox.dataset.selectSource;
+  if (!documentId || !state.sourceRecords.has(documentId)) return;
+  if (checkbox.checked) {
+    state.selectedSources.add(documentId);
+  } else {
+    state.selectedSources.delete(documentId);
+  }
+  checkbox.closest(".registry-item")?.classList.toggle("is-selected", checkbox.checked);
+  syncSourceSelectionControls();
 });
 refs.cancelDeleteSource.addEventListener("click", closeDeleteDialog);
 refs.confirmDeleteSource.addEventListener("click", deletePendingSource);

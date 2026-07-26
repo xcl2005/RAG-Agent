@@ -49,6 +49,12 @@ def test_web_client_keeps_streaming_upload_and_accessibility_guards():
     assert 'method: "DELETE"' in script
     assert "deleteSourceDialog" in script
     assert "sourceActionStatus" in script
+    assert "sourceBulkToolbar" in script
+    assert "data-select-source" in script
+    assert "batchDeletionOutcome" in script
+    assert "clearAfterMs" in script
+    assert 'failureKind === "generation_failure"' in script
+    assert 'failureKind === "citation_failure"' in script
     assert "overlayInertState" in script
     assert "event.isComposing" in script
     assert "AbortController" in script

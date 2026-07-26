@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 
 const {
+  batchDeletionOutcome,
   deletionOutcome,
   overlayInertState,
   sourceDisplayName,
@@ -50,7 +51,40 @@ test("deferred cleanup is an assertive persistent warning", () => {
   assert.deepEqual(deletionOutcome("report.pdf", ["向量"]), {
     tone: "warning",
     assertive: true,
-    message: "已从知识库删除 report.pdf；向量 清理未完成，请检查服务日志。",
+    message: "资料已从知识库移除，但 1 个后台清理步骤未完成，请检查服务日志。",
   });
-  assert.equal(deletionOutcome("report.pdf").tone, "success");
+});
+
+test("successful deletion feedback is generic and self-clearing", () => {
+  const outcome = deletionOutcome("sensitive-filename.pdf");
+  assert.deepEqual(outcome, {
+    tone: "success",
+    assertive: false,
+    message: "资料已删除",
+    clearAfterMs: 2800,
+  });
+  assert.equal(outcome.message.includes("sensitive-filename.pdf"), false);
+});
+
+test("batch failures remain actionable without listing document names", () => {
+  assert.deepEqual(
+    batchDeletionOutcome({
+      deletedCount: 2,
+      failedCount: 1,
+    }),
+    {
+      tone: "error",
+      assertive: true,
+      message: "1 份资料删除失败，失败项已保持选中，可重新尝试。其余 2 份已处理。",
+    },
+  );
+});
+
+test("batch deletion reports a compact count and self-clears", () => {
+  assert.deepEqual(batchDeletionOutcome({ deletedCount: 3 }), {
+    tone: "success",
+    assertive: false,
+    message: "已删除 3 份资料",
+    clearAfterMs: 2800,
+  });
 });

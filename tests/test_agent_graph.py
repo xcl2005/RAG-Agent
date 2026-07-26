@@ -2,9 +2,13 @@ import threading
 
 from langgraph.checkpoint.memory import InMemorySaver
 
-from rag_agent.agent.graph import RAGAgent
+from rag_agent.agent.graph import (
+    RAGAgent,
+    assess_evidence,
+    deterministic_query_variants,
+)
 from rag_agent.config import Settings
-from rag_agent.llm.client import LLMCall, QueryPlan
+from rag_agent.llm.client import LLMCall, LLMRequestError, QueryPlan
 from rag_agent.schemas import Candidate
 
 
@@ -13,9 +17,11 @@ class FakeRetriever:
         self.candidates = candidates
         self.last_debug = {"backend": "fake"}
         self.calls = 0
+        self.query_batches = []
 
     def retrieve_many(self, queries, *, rerank_query, rerank_top_k=None):
         self.calls += 1
+        self.query_batches.append(list(queries))
         return self.candidates
 
     def ready(self):
@@ -43,6 +49,11 @@ class FakeLLM:
 
     def generate(self, instructions, user_input, **kwargs):
         return LLMCall(next(self.answers), "answer", "fake", 20, 8, 1.0)
+
+
+class FailingAnswerLLM(FakeLLM):
+    def generate(self, instructions, user_input, **kwargs):
+        raise LLMRequestError("provider unavailable")
 
 
 def make_settings(tmp_path, **overrides):
@@ -77,8 +88,42 @@ def test_agent_retries_then_abstains_when_no_evidence(tmp_path):
     result = agent.ask("资料里没有答案的问题")
 
     assert result["abstained"] is True
+    assert result["failure_kind"] == "insufficient_evidence"
+    assert result["status"] == "abstained"
     assert retriever.calls == 2
     assert [event["node"] for event in result["trace"]].count("plan_queries") == 2
+
+
+def test_retry_queries_are_deduplicated_and_expand_portfolio_list_intent(tmp_path):
+    retriever = FakeRetriever([])
+    agent = RAGAgent(
+        make_settings(tmp_path, max_query_variants=3),
+        llm=DisabledLLM(),
+        retriever=retriever,
+        checkpointer=InMemorySaver(),
+    )
+
+    agent.ask("目前上传的资料里，我（xuchenglin）的项目有哪些？")
+
+    assert len(retriever.query_batches) == 2
+    first_keys = {query.casefold() for query in retriever.query_batches[0]}
+    second_keys = {query.casefold() for query in retriever.query_batches[1]}
+    assert first_keys.isdisjoint(second_keys)
+    assert any("课程项目" in query for batch in retriever.query_batches for query in batch)
+    assert any("project" in query.casefold() for query in retriever.query_batches[1])
+
+
+def test_deterministic_query_variants_cover_papers_projects_and_internships():
+    variants = deterministic_query_variants(
+        "与申请专业相关的论文、课程论文、科研实验或学术项目，与申请专业相关的实习或工作经历都有哪些"
+    )
+    combined = " ".join(variants)
+
+    assert "课程论文" in combined
+    assert "科研项目" in combined
+    assert "实习经历" in combined
+    assert "publication" in combined
+    assert len(variants) == len(set(variants))
 
 
 def test_abstention_does_not_expose_low_relevance_candidate_text(tmp_path):
@@ -168,6 +213,91 @@ def test_evidence_gate_does_not_treat_top_rrf_rank_as_absolute_relevance(tmp_pat
     assert weak_result["evidence"]["sufficient"] is False
     assert strong_result["evidence"]["sufficient"] is True
     assert strong_result["evidence"]["score_kind"] == "sparse_token_coverage"
+
+
+def test_evidence_gate_does_not_allow_reranker_to_veto_dense_or_sparse(tmp_path):
+    app_settings = make_settings(
+        tmp_path,
+        min_rerank_relevance=0.55,
+        min_dense_relevance=0.5,
+        min_sparse_coverage=0.45,
+    )
+    candidate = Candidate(
+        chunk_id="multi-signal",
+        text="relevant project evidence",
+        metadata={"source": "portfolio.docx"},
+        score=0.08,
+        rerank_score=-2.45,
+        dense_score=0.56,
+        sparse_score=0.5,
+    )
+
+    assessment = assess_evidence([candidate], app_settings)
+
+    assert assessment.sufficient is True
+    assert assessment.score_kind == "dense_cosine"
+    assert "reranker_normalized=0.080/0.550:fail" in assessment.reason
+    assert "dense_cosine=0.560/0.500:pass" in assessment.reason
+    assert "sparse_token_coverage=0.500/0.450:pass" in assessment.reason
+    assert "gate=ANY threshold" in assessment.reason
+
+
+def test_evidence_gate_rejects_when_every_absolute_signal_is_below_threshold(tmp_path):
+    app_settings = make_settings(
+        tmp_path,
+        min_rerank_relevance=0.55,
+        min_dense_relevance=0.5,
+        min_sparse_coverage=0.45,
+    )
+    candidate = Candidate(
+        chunk_id="weak-signals",
+        text="unrelated",
+        metadata={"source": "other.docx"},
+        score=0.04,
+        rerank_score=-3.18,
+        dense_score=0.3,
+        sparse_score=0.1,
+        fusion_score=1.0,
+    )
+
+    assessment = assess_evidence([candidate], app_settings)
+
+    assert assessment.sufficient is False
+    assert ":pass" not in assessment.reason
+
+
+def test_generation_failure_is_not_reported_as_insufficient_evidence(tmp_path):
+    agent = RAGAgent(
+        make_settings(tmp_path),
+        llm=FailingAnswerLLM([]),
+        retriever=FakeRetriever([evidence_candidate()]),
+        checkpointer=InMemorySaver(),
+    )
+
+    result = agent.ask("如何校验引用？")
+
+    assert result["status"] == "error"
+    assert result["failure_kind"] == "generation_failure"
+    assert result["evidence"]["sufficient"] is True
+    assert result["sources"]
+    assert "未能生成有效答案" in result["answer"]
+
+
+def test_citation_failure_is_not_reported_as_insufficient_evidence(tmp_path):
+    agent = RAGAgent(
+        make_settings(tmp_path),
+        llm=FakeLLM(["没有引用的答案", "仍然没有引用"]),
+        retriever=FakeRetriever([evidence_candidate()]),
+        checkpointer=InMemorySaver(),
+    )
+
+    result = agent.ask("如何校验引用？")
+
+    assert result["status"] == "error"
+    assert result["failure_kind"] == "citation_failure"
+    assert result["evidence"]["sufficient"] is True
+    assert result["sources"]
+    assert "引用未通过校验" in result["answer"]
 
 
 def test_sqlite_checkpoint_persists_history_across_agent_instances(tmp_path):

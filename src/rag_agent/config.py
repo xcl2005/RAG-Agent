@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     openai_base_url: str = "https://api.openai.com/v1"
     chat_model: str = "gpt-5.6-luna"
     llm_store_responses: bool = False
+    # Compatible providers may expose a reasoning/thinking switch through the
+    # OpenAI SDK's ``extra_body`` escape hatch. Keep provider defaults unless
+    # an operator opts in or out explicitly.
+    llm_thinking_mode: Literal["provider_default", "disabled", "enabled"] = "provider_default"
     max_plan_output_tokens: int = Field(default=600, ge=64, le=4000)
     max_answer_output_tokens: int = Field(default=1200, ge=64, le=8000)
     max_repair_output_tokens: int = Field(default=1200, ge=64, le=8000)

@@ -50,6 +50,7 @@ class ChatResponse(BaseModel):
     evidence: dict[str, Any]
     citation_validation: dict[str, Any]
     usage: dict[str, Any]
+    failure_kind: str | None = None
     error: str | None = None
     trace: list[dict[str, Any]] | None = None
     model_calls: list[dict[str, Any]] | None = None

@@ -12,9 +12,11 @@ Graph:
 
 from __future__ import annotations
 
+import re
 import sqlite3
 import threading
 import time
+import unicodedata
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -28,6 +30,8 @@ from rag_agent.agent.guardrails import sanitize_question, validate_citations
 from rag_agent.agent.prompts import (
     ABSTAIN_MESSAGE,
     ANSWER_INSTRUCTIONS,
+    CITATION_FAILURE_MESSAGE,
+    GENERATION_FAILURE_MESSAGE,
     REPAIR_INSTRUCTIONS,
     REPAIR_PROMPT,
     build_context,
@@ -61,11 +65,177 @@ class AgentState(TypedDict, total=False):
     repair_attempts: int
     events: list[dict[str, Any]]
     llm_calls: list[dict[str, Any]]
+    failure_kind: str | None
     error: str | None
 
 
 def _candidates(state: AgentState) -> list[Candidate]:
     return [Candidate.from_dict(value) for value in state.get("candidates", [])]
+
+
+def _query_key(query: str) -> str:
+    """Return a stable key for retry-level query de-duplication."""
+
+    normalized = unicodedata.normalize("NFKC", query).casefold()
+    return re.sub(r"\s+", " ", normalized).strip()
+
+
+def deterministic_query_variants(
+    question: str,
+    *,
+    max_variants: int = 6,
+) -> list[str]:
+    """Build bounded Chinese/English retrieval fallbacks without an LLM.
+
+    Portfolio questions frequently wrap the real intent in phrases such as
+    “目前上传的资料里” or an owner hint such as “我（name）的”. Those tokens
+    can dominate a cross-lingual query even though the documents describe
+    projects, papers, or internships without repeating the owner name.
+    The variants below remove only those container phrases and expand a small,
+    explicit set of list intents. They do not invent facts or entities.
+    """
+
+    normalized = unicodedata.normalize("NFKC", question)
+    focused = re.sub(r"(?:我|本人)\s*\([^()]{1,80}\)\s*的?", " ", normalized)
+    focused = re.sub(
+        r"(?:目前|当前)?(?:已|所)?上传的?(?:资料|文档)(?:里|中|库中)?",
+        " ",
+        focused,
+    )
+    focused = re.sub(r"(?:根据|结合)(?:当前|现有|上述)?(?:资料|文档)", " ", focused)
+    focused = focused.replace("与申请专业相关的", " ")
+    focused = re.sub(r"^(?:请问|请|帮我|请帮我|告诉我|列出|总结)\s*", "", focused)
+    focused = re.sub(r"(?:都)?有哪些(?:呢)?[?？。.\s]*$", "", focused)
+    focused = re.sub(r"[,，、;；|/]+", " ", focused)
+    focused = re.sub(r"\s+", " ", focused).strip(" 的:：?？。")
+
+    lowered = normalized.casefold()
+    chinese_terms: list[str] = []
+    english_terms: list[str] = []
+    intent_groups = (
+        (
+            ("项目", "科研", "实验"),
+            ("项目", "项目经历", "课程项目", "科研项目", "学术项目", "科研实验"),
+            ("project", "research", "academic project"),
+        ),
+        (
+            ("论文", "发表", "研究成果"),
+            ("论文", "课程论文", "学术论文", "研究成果", "发表"),
+            ("paper", "publication", "research"),
+        ),
+        (
+            ("实习", "工作经历", "就业经历"),
+            ("实习", "实习经历", "工作经历", "任职经历"),
+            ("internship", "work experience", "employment"),
+        ),
+    )
+    for triggers, zh_aliases, en_aliases in intent_groups:
+        if any(trigger.casefold() in lowered for trigger in triggers):
+            chinese_terms.extend(zh_aliases)
+            english_terms.extend(en_aliases)
+
+    def unique_terms(values: list[str]) -> list[str]:
+        return list(dict.fromkeys(value for value in values if value))
+
+    candidates: list[str] = []
+    if focused and _query_key(focused) != _query_key(normalized):
+        candidates.append(focused)
+    if chinese_terms:
+        candidates.append(" ".join(unique_terms(chinese_terms)))
+    if english_terms:
+        candidates.append(" ".join(unique_terms(english_terms)))
+
+    variants: list[str] = []
+    seen = {_query_key(normalized)}
+    for candidate in candidates:
+        key = _query_key(candidate)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        variants.append(candidate)
+        if len(variants) >= max_variants:
+            break
+    return variants
+
+
+def assess_evidence(candidates: list[Candidate], app_settings: Settings) -> EvidenceAssessment:
+    """Apply an explainable OR gate over absolute relevance signals.
+
+    Reranker logits are model-specific and their sigmoid-normalized values are
+    not calibrated probabilities. A low reranker value therefore must not veto
+    an independently strong dense-cosine or sparse-token signal. Rank-only RRF
+    scores remain intentionally excluded from this decision.
+    """
+
+    if not candidates:
+        return EvidenceAssessment(
+            sufficient=False,
+            best_score=0.0,
+            score_kind="none",
+            candidate_count=0,
+            source_count=0,
+            reason="no retrievable candidate resolved to source text",
+        )
+
+    rerank_values = [candidate.score for candidate in candidates if candidate.rerank_score is not None]
+    dense_values = [candidate.dense_score for candidate in candidates if candidate.dense_score is not None]
+    sparse_values = [candidate.sparse_score for candidate in candidates if candidate.sparse_score is not None]
+    signals: list[tuple[str, float, float]] = []
+    if rerank_values:
+        signals.append(
+            (
+                "reranker_normalized",
+                min(max(max(rerank_values), 0.0), 1.0),
+                app_settings.min_rerank_relevance,
+            )
+        )
+    if dense_values:
+        signals.append(
+            (
+                "dense_cosine",
+                min(max(max(dense_values), -1.0), 1.0),
+                app_settings.min_dense_relevance,
+            )
+        )
+    if sparse_values:
+        signals.append(
+            (
+                "sparse_token_coverage",
+                min(max(max(sparse_values), 0.0), 1.0),
+                app_settings.min_sparse_coverage,
+            )
+        )
+
+    passed = [signal for signal in signals if signal[1] >= signal[2]]
+    selected_pool = passed or signals
+    if selected_pool:
+        score_kind, best_score, _ = max(selected_pool, key=lambda signal: signal[1])
+    else:
+        score_kind, best_score = "none", 0.0
+    sufficient = bool(passed)
+    signal_details = ", ".join(
+        f"{kind}={score:.3f}/{threshold:.3f}:{'pass' if score >= threshold else 'fail'}"
+        for kind, score, threshold in signals
+    )
+    if not signal_details:
+        signal_details = "none (rank-only fusion scores are not evidence)"
+    source_count = len(
+        {
+            str(candidate.metadata.get("source", "")).strip()
+            for candidate in candidates
+            if str(candidate.metadata.get("source", "")).strip()
+        }
+    )
+    return EvidenceAssessment(
+        sufficient=sufficient,
+        best_score=best_score,
+        score_kind=score_kind,
+        candidate_count=len(candidates),
+        source_count=source_count,
+        reason=(
+            f"signals[{signal_details}]; gate=ANY threshold; sufficient={sufficient}; selected={score_kind}"
+        ),
+    )
 
 
 def _event(
@@ -210,6 +380,7 @@ class RAGAgent:
             "repair_attempts": 0,
             "events": _event({}, "initialize", started, history_turns=len(history)),
             "llm_calls": [],
+            "failure_kind": None,
             "error": None,
         }
 
@@ -217,10 +388,12 @@ class RAGAgent:
         started = time.perf_counter()
         attempt = state.get("retrieval_attempts", 0) + 1
         question = state["question"]
-        queries = [question]
-        strategy = "original_query"
+        previous_queries = state.get("search_queries", [])
+        deterministic = deterministic_query_variants(question)
+        planned_queries: list[str] = []
+        strategy = "deterministic"
         llm_calls = state.get("llm_calls", [])
-        error: str | None = None
+        planner_error: str | None = None
 
         if self.llm.enabled:
             try:
@@ -230,21 +403,46 @@ class RAGAgent:
                     attempt=attempt,
                     max_variants=self.settings.max_query_variants,
                 )
-                # 原始问题永远保留在第一位，避免改写丢失错误码、编号和专有名词。
-                queries = list(dict.fromkeys([question, *plan.search_queries]))
-                queries = queries[: self.settings.max_query_variants]
+                planned_queries = plan.search_queries
                 strategy = plan.strategy
                 llm_calls = [*llm_calls, {"purpose": "query_plan", **call.usage_dict()}]
             except LLMRequestError as exc:
-                error = str(exc)
-                strategy = "original_query_fallback"
+                planner_error = type(exc).__name__
+                strategy = "deterministic_fallback"
+
+        # The first pass keeps the exact question to preserve identifiers. A
+        # retry prioritizes deterministic variants that were not already sent,
+        # avoiding a second identical retrieval when the planner repeats itself.
+        if attempt == 1:
+            pool = [question, *planned_queries, *deterministic]
+        else:
+            pool = [*deterministic, *planned_queries, question]
+            strategy = f"{strategy}+deduplicated_retry"
+
+        previous_keys = {_query_key(query) for query in previous_queries} if attempt > 1 else set()
+        queries: list[str] = []
+        seen: set[str] = set()
+        for query in pool:
+            normalized_query = re.sub(r"\s+", " ", query).strip()
+            key = _query_key(normalized_query)
+            if not key or key in seen or key in previous_keys:
+                continue
+            seen.add(key)
+            queries.append(normalized_query)
+            if len(queries) >= self.settings.max_query_variants:
+                break
+
+        # A very short/generic question may have no safe deterministic rewrite.
+        # Repeating the exact question is preferable to skipping retrieval.
+        if not queries:
+            queries = [question]
 
         return {
             "retrieval_attempts": attempt,
             "search_queries": queries,
             "query_strategy": strategy,
             "llm_calls": llm_calls,
-            "error": error,
+            "error": None,
             "events": _event(
                 state,
                 "plan_queries",
@@ -252,7 +450,9 @@ class RAGAgent:
                 attempt=attempt,
                 query_count=len(queries),
                 strategy=strategy,
-                fallback=bool(error),
+                fallback=bool(planner_error) or not self.llm.enabled,
+                planner_error=planner_error,
+                previous_queries_omitted=sum(1 for query in pool if _query_key(query) in previous_keys),
             ),
         }
 
@@ -282,64 +482,7 @@ class RAGAgent:
 
     def grade_evidence(self, state: AgentState) -> AgentState:
         started = time.perf_counter()
-        candidates = _candidates(state)
-        if not candidates:
-            assessment = EvidenceAssessment(
-                sufficient=False,
-                best_score=0.0,
-                score_kind="none",
-                candidate_count=0,
-                source_count=0,
-                reason="no retrievable candidate resolved to source text",
-            )
-        else:
-            uses_reranker = candidates[0].rerank_score is not None
-            if uses_reranker:
-                best_score = candidates[0].score
-                score_kind = "reranker_normalized"
-                threshold_description = f"reranker>={self.settings.min_rerank_relevance:.3f}"
-                sufficient = best_score >= self.settings.min_rerank_relevance
-            else:
-                # RRF is rank-only: with one non-empty backend its first result
-                # is always 1.0, regardless of semantic relevance. Gate on
-                # absolute dense cosine or lexical token coverage instead.
-                best_dense = max(
-                    (candidate.dense_score for candidate in candidates if candidate.dense_score is not None),
-                    default=-1.0,
-                )
-                best_sparse = max(
-                    (
-                        candidate.sparse_score
-                        for candidate in candidates
-                        if candidate.sparse_score is not None
-                    ),
-                    default=0.0,
-                )
-                sufficient = (
-                    best_dense >= self.settings.min_dense_relevance
-                    or best_sparse >= self.settings.min_sparse_coverage
-                )
-                if best_dense >= self.settings.min_dense_relevance:
-                    best_score = min(max(best_dense, 0.0), 1.0)
-                    score_kind = "dense_cosine"
-                else:
-                    best_score = best_sparse
-                    score_kind = "sparse_token_coverage"
-                threshold_description = (
-                    f"dense>={self.settings.min_dense_relevance:.3f} OR "
-                    f"sparse>={self.settings.min_sparse_coverage:.3f}"
-                )
-            assessment = EvidenceAssessment(
-                sufficient=sufficient,
-                best_score=best_score,
-                score_kind=score_kind,
-                candidate_count=len(candidates),
-                source_count=len({str(candidate.metadata.get("source", "")) for candidate in candidates}),
-                reason=(
-                    f"best {score_kind} signal {best_score:.3f}; "
-                    f"gate={threshold_description}; sufficient={sufficient}"
-                ),
-            )
+        assessment = assess_evidence(_candidates(state), self.settings)
 
         value = assessment.to_dict()
         return {
@@ -362,10 +505,11 @@ class RAGAgent:
 
         if not bundle.candidates or not bundle.text:
             return {
-                "answer": ABSTAIN_MESSAGE,
+                "answer": GENERATION_FAILURE_MESSAGE,
                 "sources": [],
                 "context": "",
                 "abstained": True,
+                "failure_kind": "generation_failure",
                 "error": "empty_context_after_budgeting",
                 "events": _event(
                     state,
@@ -379,10 +523,11 @@ class RAGAgent:
 
         if not self.llm.enabled:
             return {
-                "answer": ("已检索到相关资料，但当前未配置 OPENAI_API_KEY，因此没有调用模型生成最终答案。"),
+                "answer": GENERATION_FAILURE_MESSAGE,
                 "sources": sources,
                 "context": bundle.text,
                 "abstained": True,
+                "failure_kind": "generation_failure",
                 "error": "llm_not_configured",
                 "events": _event(
                     state,
@@ -400,10 +545,31 @@ class RAGAgent:
                 render_answer_prompt(state["question"], bundle.text),
             )
             llm_calls = [*llm_calls, {"purpose": "answer", **call.usage_dict()}]
+            answer = call.text.strip()
+            if not answer:
+                return {
+                    "answer": GENERATION_FAILURE_MESSAGE,
+                    "sources": sources,
+                    "context": bundle.text,
+                    "abstained": True,
+                    "failure_kind": "generation_failure",
+                    "llm_calls": llm_calls,
+                    "error": "empty_model_output",
+                    "events": _event(
+                        state,
+                        "generate_answer",
+                        started,
+                        source_count=len(sources),
+                        model_called=True,
+                        failed=True,
+                        failure_kind="generation_failure",
+                    ),
+                }
             return {
-                "answer": call.text.strip(),
+                "answer": answer,
                 "sources": sources,
                 "context": bundle.text,
+                "failure_kind": None,
                 "llm_calls": llm_calls,
                 "events": _event(
                     state,
@@ -416,11 +582,19 @@ class RAGAgent:
                 ),
             }
         except LLMRequestError as exc:
+            failed_call = getattr(exc, "call", None)
+            if failed_call is not None and hasattr(failed_call, "usage_dict"):
+                llm_calls = [
+                    *llm_calls,
+                    {"purpose": "answer", "failed": True, **failed_call.usage_dict()},
+                ]
             return {
-                "answer": "模型服务暂时不可用，无法生成可靠答案。",
+                "answer": GENERATION_FAILURE_MESSAGE,
                 "sources": sources,
                 "context": bundle.text,
                 "abstained": True,
+                "failure_kind": "generation_failure",
+                "llm_calls": llm_calls,
                 "error": str(exc),
                 "events": _event(
                     state,
@@ -437,7 +611,7 @@ class RAGAgent:
         report = validate_citations(
             state.get("answer", ""),
             len(state.get("sources", [])),
-            abstained=state.get("abstained", False),
+            abstained=state.get("failure_kind") == "insufficient_evidence",
         )
         value = report.to_dict()
         return {
@@ -446,6 +620,8 @@ class RAGAgent:
         }
 
     def route_after_citation_validation(self, state: AgentState) -> str:
+        if state.get("failure_kind") in {"generation_failure", "citation_failure"}:
+            return "finish"
         if state.get("citation_report", {}).get("valid"):
             return "finish"
         if self.llm.enabled and state.get("repair_attempts", 0) < 1:
@@ -467,17 +643,48 @@ class RAGAgent:
                 max_output_tokens=self.settings.max_repair_output_tokens,
             )
             llm_calls = [*llm_calls, {"purpose": "citation_repair", **call.usage_dict()}]
+            answer = call.text.strip()
+            if not answer:
+                return {
+                    "answer": CITATION_FAILURE_MESSAGE,
+                    "abstained": True,
+                    "failure_kind": "citation_failure",
+                    "repair_attempts": attempts,
+                    "llm_calls": llm_calls,
+                    "error": "empty_citation_repair_output",
+                    "events": _event(
+                        state,
+                        "repair_citations",
+                        started,
+                        attempt=attempts,
+                        failed=True,
+                        failure_kind="citation_failure",
+                    ),
+                }
             return {
-                "answer": call.text.strip(),
+                "answer": answer,
                 "repair_attempts": attempts,
+                "failure_kind": None,
                 "llm_calls": llm_calls,
                 "events": _event(state, "repair_citations", started, attempt=attempts),
             }
         except LLMRequestError as exc:
+            failed_call = getattr(exc, "call", None)
+            if failed_call is not None and hasattr(failed_call, "usage_dict"):
+                llm_calls = [
+                    *llm_calls,
+                    {
+                        "purpose": "citation_repair",
+                        "failed": True,
+                        **failed_call.usage_dict(),
+                    },
+                ]
             return {
-                "answer": ABSTAIN_MESSAGE,
+                "answer": CITATION_FAILURE_MESSAGE,
                 "abstained": True,
+                "failure_kind": "citation_failure",
                 "repair_attempts": attempts,
+                "llm_calls": llm_calls,
                 "error": str(exc),
                 "events": _event(
                     state,
@@ -497,6 +704,8 @@ class RAGAgent:
             # endpoint for repeated unrelated queries.
             "sources": [],
             "abstained": True,
+            "failure_kind": "insufficient_evidence",
+            "error": None,
             "citation_report": {
                 "valid": True,
                 "cited_ids": [],
@@ -514,10 +723,11 @@ class RAGAgent:
     def citation_failure(self, state: AgentState) -> AgentState:
         started = time.perf_counter()
         return {
-            "answer": ABSTAIN_MESSAGE,
-            "sources": [],
+            "answer": CITATION_FAILURE_MESSAGE,
             "abstained": True,
+            "failure_kind": "citation_failure",
             "confidence": 0.0,
+            "error": "citation_validation_failed",
             "events": _event(
                 state,
                 "citation_failure",
@@ -561,19 +771,29 @@ class RAGAgent:
     def _result(state: AgentState, *, include_trace: bool) -> dict[str, Any]:
         calls = state.get("llm_calls", [])
         abstained = bool(state.get("abstained", False))
+        failure_kind = state.get("failure_kind")
+        if failure_kind in {"generation_failure", "citation_failure"}:
+            status = "error"
+        elif abstained:
+            status = "abstained"
+        else:
+            status = "answered"
         value: dict[str, Any] = {
             "question": state["question"],
             "thread_id": state["thread_id"],
             "trace_id": state["trace_id"],
-            "status": "abstained" if abstained else "answered",
+            "status": status,
             "answer": state.get("answer", ""),
             "abstained": abstained,
+            "failure_kind": failure_kind,
             "confidence": float(state.get("confidence", 0.0)),
             "query": (state.get("search_queries") or [state["question"]])[0],
             "queries": state.get("search_queries", []),
-            # Defense in depth for model-error and repair-error branches that
-            # may have populated sources before deciding to abstain.
-            "sources": [] if abstained else state.get("sources", []),
+            # Only low-relevance candidates are hidden. For model/citation
+            # failures the gate already accepted these sources, so preserving
+            # them makes the technical failure diagnosable without presenting
+            # an unverified model answer as fact.
+            "sources": ([] if failure_kind == "insufficient_evidence" else state.get("sources", [])),
             "evidence": state.get("evidence", {}),
             "citation_validation": state.get("citation_report", {}),
             "usage": {
