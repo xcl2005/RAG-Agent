@@ -1,49 +1,39 @@
+"""Small, explicit data contracts shared by the ingestion and agent layers."""
 
-"""项目中的核心数据结构。
+from __future__ import annotations
 
-这里用 dataclass 而不是复杂 ORM，是为了让你更容易看懂 RAG 流程中的数据传递：
-RawDocument -> Chunk -> Candidate。
-"""
-
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 
-@dataclass
+@dataclass(slots=True)
 class RawDocument:
-    """刚从文件解析出来的原始文档单元。
+    """A text unit produced by a file loader.
 
-    例子：
-    - PDF 通常按页解析，所以一页就是一个 RawDocument。
-    - Markdown/TXT 通常整个文件就是一个 RawDocument。
+    A PDF page is one unit, while a Markdown file is usually one unit. Metadata
+    is carried through every later stage so an answer can always be traced back
+    to its source.
     """
 
     text: str
     metadata: dict[str, Any]
 
 
-@dataclass
+@dataclass(slots=True)
 class Chunk:
-    """切分后的文本片段。
-
-    RAG 不会把整本 PDF 全塞给模型，而是先切成 chunk。
-    检索时找到最相关的几个 chunk，再交给 LLM 回答。
-    """
+    """A stable, retrievable piece of a document."""
 
     chunk_id: str
     text: str
     metadata: dict[str, Any]
 
 
-@dataclass
+@dataclass(slots=True)
 class Candidate:
-    """检索阶段返回的候选证据。
+    """One piece of candidate evidence with transparent ranking signals.
 
-    一个 Candidate 基本就是“一个可能有用的 chunk + 各种分数”。
-    dense_score：向量检索分数。
-    sparse_score：关键词检索分数。
-    rerank_score：重排模型分数。
-    score：当前排序时使用的最终分数。
+    ``score`` is always normalized to the ``[0, 1]`` range. Raw scores remain
+    available in their dedicated fields/debug map so ranking can be audited.
     """
 
     chunk_id: str
@@ -52,5 +42,34 @@ class Candidate:
     score: float = 0.0
     dense_score: float | None = None
     sparse_score: float | None = None
+    fusion_score: float | None = None
     rerank_score: float | None = None
+    matched_queries: list[str] = field(default_factory=list)
+    security_flags: list[str] = field(default_factory=list)
     debug: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON/checkpoint-friendly representation."""
+
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, value: dict[str, Any]) -> Candidate:
+        """Rebuild a candidate after a durable checkpoint round trip."""
+
+        return cls(**value)
+
+
+@dataclass(slots=True)
+class EvidenceAssessment:
+    """Decision made by the evidence gate before generation."""
+
+    sufficient: bool
+    best_score: float
+    score_kind: str
+    candidate_count: int
+    source_count: int
+    reason: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)

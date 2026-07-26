@@ -1,464 +1,364 @@
-# Mainstream RAG Agent：大批量资料检索问答系统
+# Adaptive RAG Agent
 
-这是一个适合写进简历、面试能讲清楚、同时难度不过分高的 **RAG Agent 项目**。它围绕“企业知识库问答 / 大批量资料检索 / 幻觉控制 / rerank / chunk 调优”来设计。
+一个面向招聘展示、同时保留真实工程边界的现代化 RAG 项目：使用
+LangGraph 编排**有界、状态持久化的 Agentic Workflow**，组合多查询改写、
+Dense + Sparse 混合检索、加权 RRF、CrossEncoder 重排、证据门控和服务端引用校验。
 
-项目特点：
+项目不是“让模型无限思考”的黑盒 Agent。确定性的安全、检索和校验步骤由代码控制，
+模型主要在查询规划与基于证据生成两个位置做受约束决策，并在引用格式失败时最多执行
+一次受限修复。
 
-- 支持导入 `PDF / Word / Markdown / TXT / HTML` 资料。
-- 使用 **Qdrant 向量库** 做语义检索。
-- 使用 **SQLite FTS5** 做关键词检索，并加入中文 bigram 辅助索引。
-- 使用 **RRF** 做 dense + sparse 混合召回融合。
-- 使用 **CrossEncoder reranker** 对候选片段二次排序。
-- 使用 **LangGraph** 编排 Agent 流程：问题改写 → 检索 → 证据判断 → 回答生成。
-- 使用 **FastAPI** 提供问答 API。
-- 提供 chunk size、overlap、topK、rerank topK、幻觉阈值等可调参数。
-- 回答必须带引用来源，证据不足时拒答，降低幻觉。
-- **代码已加入大量中文注释**，适合边跑边学。
-- 新增 `docs/code_walkthrough.md`，按程序执行顺序讲解每个核心文件。
+## 这次升级解决了什么
 
-> 这个项目不是“堆技术名词”，而是一个简化版真实企业 RAG 系统。你可以把它包装为：企业内部文档知识库智能问答 Agent。
+原项目已经具备 Hybrid RAG 的教学骨架，但 Agent 图仍是线性的，引用只依赖 Prompt，
+SQLite 与 Qdrant 缺少文档版本管理，上传和本地路径接口也没有完整边界。
+当前版本把它升级为可演示、可测试、可解释的工程项目：
 
----
+- 自适应 LangGraph：弱证据时最多重试一次检索，引用失败时最多修复一次，杜绝无限循环。
+- 持久化会话：SQLite checkpointer + `thread_id`，支持多轮问题中的上下文继承。
+- 现代模型接口：默认使用 OpenAI Responses API；兼容只支持 Chat Completions 的第三方服务。
+- 多查询 Hybrid Retrieval：保留原始问题，再加入受控改写；Dense 与 FTS5 结果通过加权 RRF 融合。
+- 分数语义分离：RRF 只用于排序；证据门控使用 reranker 固定归一化分数、
+  dense cosine 或 sparse token coverage，不把排名第一误当作绝对相关。
+- 可验证引用：模型只能引用本轮实际进入上下文的 `[S1]`、`[S2]`；服务端会解析、校验和修复。
+- Prompt Injection 防护：检索文本作为转义后的不可信数据传入，并在来源中暴露风险标签。
+- 幂等增量入库：文档内容哈希、manifest、按文档原子替换、旧向量清理和逐文件失败隔离。
+- 安全 API：聊天可选共享密钥、上传强制显式密钥、限定导入根目录、文件数量/大小限制、
+  流式落盘、扩展名与 magic 校验。
+- 可观测输出：`trace_id`、节点级耗时、查询策略、分数明细、模型调用与 token 使用量。
+- 可运行产品界面：零构建浅色文档工作台，支持原始文件名展示、上传与安全删除、
+  SSE 节点进度、引用定位、运行追踪、请求中止和移动端抽屉。
+- 可互操作接口：只读 MCP 工具 `search_knowledge_base` 与 `ask_knowledge_base`。
+- 工程门禁：Docker、GitHub Actions、Ruff、pytest、coverage、pre-commit 和离线检索评测。
 
-## 1. 技术栈选择
+CI 对单元测试设置了 **75% 总覆盖率门槛**。这不是模型效果指标；检索效果必须用
+你自己的版本化数据集重新运行评测，不能在简历中编造提升百分比。
 
-### 后端与 Agent 编排
+## 架构
 
-- Python 3.10+
-- FastAPI：提供 HTTP API。
-- LangGraph：编排多步骤 Agent 工作流。
-- OpenAI SDK：兼容 OpenAI / DeepSeek / 通义千问等 OpenAI-compatible API。
-
-### 检索与向量库
-
-- Qdrant：向量检索数据库。
-- SentenceTransformers：本地 embedding。
-- SQLite FTS5：关键词检索。
-- RRF：融合向量检索和关键词检索结果。
-- CrossEncoder：rerank，提高最终召回质量。
-
-### 文档处理
-
-- pypdf：PDF 文本抽取。
-- python-docx：Word 文档抽取。
-- BeautifulSoup：HTML 清洗。
-
----
-
-## 2. 项目结构
-
-```text
-rag-agent-mainstream/
-├── README.md
-├── .env.example
-├── docker-compose.yml
-├── requirements.txt
-├── pyproject.toml
-├── data/
-│   ├── raw/
-│   │   └── sample.md
-│   └── eval/
-│       └── sample_retrieval.jsonl
-├── storage/
-│   └── .gitkeep
-├── scripts/
-│   ├── ingest.py
-│   ├── query.py
-│   └── eval_retrieval.py
-├── src/
-│   └── rag_agent/
-│       ├── __init__.py
-│       ├── config.py
-│       ├── schemas.py
-│       ├── api/
-│       │   └── main.py
-│       ├── agent/
-│       │   ├── graph.py
-│       │   └── prompts.py
-│       ├── ingest/
-│       │   ├── chunker.py
-│       │   ├── indexer.py
-│       │   └── loaders.py
-│       ├── llm/
-│       │   └── client.py
-│       ├── retrieval/
-│       │   ├── hybrid.py
-│       │   ├── reranker.py
-│       │   ├── sqlite_store.py
-│       │   └── vector_store.py
-│       └── utils/
-│           └── logging.py
-├── docs/
-│   ├── design.md
-│   ├── tuning.md
-│   ├── code_walkthrough.md
-│   └── interview.md
-└── tests/
-    ├── test_chunker.py
-    └── test_rrf.py
+```mermaid
+flowchart LR
+    W["Web UI"] --> API["FastAPI /api/v1"]
+    H["HTTP / SSE / Swagger"] --> API
+    API --> G["LangGraph adaptive workflow"]
+    CLI["CLI"] --> G
+    MC["MCP Client"] --> MCP["Read-only MCP server"]
+    MCP --> G
+    G --> P["Query planner"]
+    P --> H["Hybrid retriever"]
+    H --> D["Qdrant dense search"]
+    H --> S["SQLite FTS5"]
+    D --> F["Weighted RRF + reranker"]
+    S --> F
+    F --> E{"Evidence sufficient?"}
+    E -- "no, bounded retry" --> P
+    E -- "yes" --> A["Grounded generation"]
+    A --> C{"Citation validator"}
+    C -- "repair once" --> A
+    C -- "valid" --> O["Answer + sources + trace"]
+    E -- "still weak" --> X["Explicit abstention"]
 ```
 
----
+详细设计见：
 
-## 2.1 如果你是第一次看代码，建议按这个顺序
+- [系统架构](docs/architecture.md)
+- [2026 技术雷达与选型依据](docs/technology-radar-2026.md)
+- [评测方法](docs/evaluation.md)
+- [安全边界](docs/security.md)
+- [简历与面试表达](docs/resume-guide.md)
+- [代码阅读路线](docs/code_walkthrough.md)
 
-我已经在核心代码里加了中文注释。不要从 README 一口气看到底，建议先看：
+## 快速开始
 
-```text
-1. docs/code_walkthrough.md              # 从整体执行流程看懂项目
-2. src/rag_agent/agent/graph.py          # Agent 工作流
-3. src/rag_agent/retrieval/hybrid.py     # 混合检索：向量 + 关键词 + RRF + rerank
-4. src/rag_agent/ingest/chunker.py       # chunk 切分和 overlap
-5. src/rag_agent/api/main.py             # FastAPI 接口入口
-```
+### Windows 一键启动（推荐）
 
-你面试时最应该讲清楚的是：**为什么要切 chunk、为什么要 hybrid search、为什么要 rerank、怎么降低幻觉**。
-
----
-
-## 3. 快速启动
-
-### 3.1 创建环境
-
-```bash
-conda create -n rag-agent python=3.10 -y
-conda activate rag-agent
-pip install -r requirements.txt
-```
-
-Windows PowerShell 也一样：
+完成一次 `.env` 配置后，日常启动只需要在项目根目录双击 `start.cmd`，或执行：
 
 ```powershell
-conda create -n rag-agent python=3.10 -y
-conda activate rag-agent
-pip install -r requirements.txt
+.\start.cmd
 ```
 
-### 3.2 启动 Qdrant
+脚本会自动完成以下工作：
 
-需要先安装 Docker Desktop。
+1. 首次运行时创建 `.venv` 并安装项目依赖。
+2. 检查并尝试启动 Docker Desktop。
+3. 只启动 Qdrant 容器，保留本机现有的 SQLite、上传文件和索引。
+4. 在后台启动 API，先确认进程存活，再检查 SQLite 与 Qdrant。
+5. 自动打开 [http://127.0.0.1:8000](http://127.0.0.1:8000)（端口跟随 `.env` 的
+   `API_PORT`）。
 
-```bash
-docker compose up -d
-```
-
-检查：
-
-```bash
-docker ps
-```
-
-如果看到 `qdrant/qdrant` 正在运行即可。
-
-### 3.3 配置大模型 API
-
-复制环境变量文件：
-
-```bash
-cp .env.example .env
-```
-
-Windows PowerShell：
+运行日志位于 `storage/api.stderr.log`。若不希望自动打开浏览器：
 
 ```powershell
-copy .env.example .env
+.\start.cmd -NoBrowser
 ```
 
-然后修改 `.env`：
+首次启动或首次提问可能需要加载本地 Embedding/Reranker 模型，会比后续运行慢。
+全新知识库还没有 Qdrant collection 时，脚本会提示上传或导入首份资料，但仍会正常
+打开 Web UI。
+若页面提示访问 Key 无效，请在左侧“连接设置”中填写 `.env` 里的 `API_ACCESS_KEY`。
+不要执行 `docker compose down -v`，该命令会删除 Qdrant 数据卷。
 
-```env
-OPENAI_API_KEY=你的key
-OPENAI_BASE_URL=https://api.openai.com/v1
-CHAT_MODEL=gpt-4o-mini
-```
-
-如果使用 DeepSeek，可以写成：
-
-```env
-OPENAI_API_KEY=你的deepseek key
-OPENAI_BASE_URL=https://api.deepseek.com
-CHAT_MODEL=deepseek-chat
-```
-
-如果使用通义千问兼容接口，根据你自己的平台文档填写 base url 和模型名。
-
----
-
-## 4. 导入资料
-
-把你的资料放到：
-
-```text
-data/raw/
-```
-
-支持：
-
-- `.pdf`
-- `.docx`
-- `.md`
-- `.txt`
-- `.html`
-
-执行索引：
-
-```bash
-python scripts/ingest.py --path data/raw --reset
-```
-
-参数说明：
-
-- `--path`：资料目录。
-- `--reset`：清空旧索引后重新导入。
-
----
-
-## 5. 命令行问答
-
-```bash
-python scripts/query.py "这个系统如何降低幻觉？"
-```
-
-示例输出：
-
-```text
-回答：
-本系统主要通过三层机制降低幻觉：第一，回答生成阶段只允许模型基于检索上下文作答；第二，所有关键结论必须带来源引用；第三，当检索结果为空或相关性低于阈值时，系统会拒答并提示证据不足。 [S1] [S2]
-
-来源：
-[S1] data/raw/sample.md
-[S2] data/raw/sample.md
-```
-
----
-
-## 6. 启动 API 服务
-
-```bash
-uvicorn rag_agent.api.main:app --reload --app-dir src
-```
-
-打开：
-
-```text
-http://127.0.0.1:8000/docs
-```
-
-问答请求示例：
-
-```bash
-curl -X POST "http://127.0.0.1:8000/ask" \
-  -H "Content-Type: application/json" \
-  -d '{"question":"RAG 系统如何处理大批量资料检索？"}'
-```
-
-Windows PowerShell：
+停止后台 API、但保留 Qdrant 和全部数据：
 
 ```powershell
+.\stop.cmd
+```
+
+如需连 Qdrant 容器也一起停止，可运行 `.\stop.cmd -StopQdrant`；该操作仍会保留数据卷。
+
+### 在 PyCharm 中启动或断点调试
+
+1. 打开项目根目录，进入 `File → Settings → Project → Python Interpreter`。
+2. 选择现有解释器：`<项目目录>\.venv\Scripts\python.exe`。
+3. 如果之前通过 `start.cmd` 启动过后台 API，先在 PyCharm Terminal 执行 `.\stop.cmd`，
+   避免端口 `8000` 冲突。Qdrant 会继续运行。
+4. 若 Qdrant 尚未运行，执行 `docker compose up -d qdrant`。
+5. 在项目树中找到 `scripts/run_api.py`，右键选择 **Run 'run_api'**；需要断点时选择
+   **Debug 'run_api'**。
+6. 控制台出现 Uvicorn 启动信息后，打开
+   [http://127.0.0.1:8000](http://127.0.0.1:8000)。
+
+`run_api.py` 会自动切换到项目根目录、加载 `.env`，并为本地 Qdrant 设置代理绕过，
+因此不需要把 Key 复制到 PyCharm Run Configuration。停止调试时点击 PyCharm 的红色
+Stop 按钮即可；之后想恢复后台运行，再执行 `.\start.cmd`。
+
+下面是脚本内部对应的手动安装与启动步骤，适合排错或 Linux/macOS 环境。
+
+### 1. 安装
+
+Python 3.10–3.14 均在项目约束内，建议使用 3.12。
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python -m pip install --upgrade pip
+.\.venv\Scripts\python -m pip install -e ".[dev,mcp]"
+Copy-Item .env.example .env
+```
+
+Linux/macOS 可先运行 `source .venv/bin/activate`，再把后续
+`.\.venv\Scripts\python`、`*.exe` 命令分别替换成 `python` 和对应的无后缀命令；
+复制配置使用 `cp .env.example .env`。
+
+编辑 `.env`，至少填写：
+
+```dotenv
+OPENAI_API_KEY=your-key
+LLM_API_MODE=responses
+CHAT_MODEL=gpt-5.6-luna
+# 上传接口必须显式配置该 Key；聊天在本机演示时可以留空。
+API_ACCESS_KEY=choose-a-local-secret
+```
+
+若第三方 OpenAI-compatible 服务不支持 Responses API，可设置：
+
+```dotenv
+LLM_API_MODE=chat_completions
+OPENAI_BASE_URL=https://your-provider.example/v1
+CHAT_MODEL=your-model
+```
+
+### 2. 启动 Qdrant
+
+```powershell
+docker compose up -d qdrant
+```
+
+Qdrant 只绑定 `127.0.0.1`，不会默认暴露到局域网或公网。
+
+### 3. 导入资料
+
+把 PDF、DOCX、Markdown、TXT 或 HTML 文件放入 `data/raw/`：
+
+```powershell
+.\.venv\Scripts\python scripts/ingest.py --path data/raw --json
+```
+
+重复执行时，只有内容哈希、索引指纹和 Qdrant 向量数量都一致才会跳过。索引指纹包含
+切片参数、embedding、collection 和 schema 版本。只有明确需要全量重建时才使用
+`--reset`；强制重建单个未变化文档可使用 `--force`。
+
+> 从旧版项目升级：旧 SQLite chunk 无法可靠回填文档身份，首次启动会清理这些派生行并记录
+> warning。请保留 `data/raw/` 原始资料，并执行一次带 `--reset` 的完整导入。
+
+### 4. 启动应用
+
+```powershell
+.\.venv\Scripts\rag-agent-api.exe
+```
+
+打开 [http://127.0.0.1:8000](http://127.0.0.1:8000) 使用 Web UI，
+或打开 [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) 查看 OpenAPI。
+
+交互入口不只 Web：
+
+| 入口 | 适合场景 | 使用方式 |
+|---|---|---|
+| Knowledge Workspace | 招聘演示、上传/删除资料、查看引用与运行追踪 | 浏览器打开 `/` |
+| CLI | 脚本调用、快速验证、持续集成 | `scripts/query.py` |
+| REST / SSE | 前端或其他服务集成 | `/api/v1/chat`、`/api/v1/chat/stream` |
+| Swagger | 手动调试 HTTP 契约 | 浏览器打开 `/docs` |
+| MCP | 让支持 MCP 的 Agent/IDE 只读调用知识库 | `rag-agent-mcp` |
+
+也可以直接使用 CLI：
+
+```powershell
+.\.venv\Scripts\python scripts/query.py "这个系统怎样保证引用有效？" --json
+```
+
+使用同一个会话 ID 可演示持久化多轮状态：
+
+```powershell
+.\.venv\Scripts\python scripts/query.py "引用校验是什么？" --thread-id interview-demo
+.\.venv\Scripts\python scripts/query.py "它失败后会怎样？" --thread-id interview-demo
+```
+
+当前 CLI 是一次命令完成一次问答，不是全屏交互式 TUI；通过复用 `--thread-id`
+可以连续演示多轮状态。
+
+没有配置 LLM Key 时，系统仍能测试入库与检索，但会明确拒绝生成最终答案。
+
+## Docker 一键启动
+
+```powershell
+$env:OPENAI_API_KEY="your-key"
+$env:API_ACCESS_KEY="choose-a-local-secret"
+$env:ADMIN_API_KEY="choose-a-different-admin-secret"
+docker compose up --build
+```
+
+应用和 Qdrant 都只映射到本机回环地址。若准备公开部署，必须额外配置 TLS、
+强认证、持久化任务队列、速率限制和租户/文档 ACL；当前 Compose 定位是本地演示。
+
+Compose 使用 named volume，宿主机的 `./data/raw` 不会自动映射进容器。Docker 模式请
+通过 Web UI 或 `/api/v1/documents` 上传；`/api/v1/ingest` 看到的是容器 volume 内路径。
+
+## HTTP API
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| `GET` | `/health/live` | 进程存活检查 |
+| `GET` | `/health/ready` | SQLite 与 Qdrant 依赖就绪检查 |
+| `POST` | `/api/v1/chat` | 同步问答，返回答案、引用、证据判断与 trace |
+| `POST` | `/api/v1/chat/stream` | SSE 输出节点完成事件与最终答案 |
+| `POST` | `/api/v1/documents` | 安全上传文件并返回后台 `job_id` |
+| `POST` | `/api/v1/ingest` | 管理员导入允许根目录内的服务器文件，可显式 reset |
+| `GET` | `/api/v1/jobs/{job_id}` | 查询入库任务状态 |
+| `GET` | `/api/v1/sources` | 查看脱敏后的资料清单与删除资格 |
+| `DELETE` | `/api/v1/sources/{document_id}` | 删除浏览器上传的受管资料及其索引/向量 |
+
+设置 `API_ACCESS_KEY` 后，业务接口必须携带；上传接口在该 Key 为空时会直接关闭：
+
+```http
+X-API-Key: your-secret
+```
+
+Web UI 的“连接设置”中也需要填写同一个 Key。服务器路径导入使用独立
+`ADMIN_API_KEY` / `X-Admin-Key`；未配置管理员 Key 时该接口关闭。
+
+来源删除与上传使用同一个本地 `API_ACCESS_KEY`，但只允许操作
+`ALLOWED_INGEST_ROOT/uploads` 下的受管副本。管理员通过服务器路径导入的文件会在
+Web UI 中标记为不可删除，接口也会再次校验边界；网页不会 unlink 任意本地文件。
+
+问答示例：
+
+```powershell
+$body = @{
+  question = "系统如何减少幻觉？"
+  thread_id = "demo-thread"
+  include_trace = $true
+} | ConvertTo-Json
+
 Invoke-RestMethod `
-  -Uri "http://127.0.0.1:8000/ask" `
   -Method Post `
+  -Uri http://127.0.0.1:8000/api/v1/chat `
   -ContentType "application/json" `
-  -Body '{"question":"RAG 系统如何处理大批量资料检索？"}'
+  -Headers @{"X-API-Key" = "your-secret"} `
+  -Body $body
 ```
 
-上传并导入文件：
+## MCP
 
-```bash
-curl -X POST "http://127.0.0.1:8000/upload" \
-  -F "files=@data/raw/sample.md" \
-  -F "reset=false"
+MCP 是这个知识库的互操作接口，不替代 LangGraph 工作流。服务只暴露读取能力，
+不会通过 MCP 上传文件或清空索引：
+
+```powershell
+.\.venv\Scripts\rag-agent-mcp.exe
 ```
 
-这个接口会把文件保存到 `data/raw/uploads/`，然后立即执行索引导入。
+默认使用 `stdio`；设置 `MCP_TRANSPORT=streamable-http` 可切换传输方式。
+可用能力：
 
----
+- `search_knowledge_base`：返回排序后的证据片段，供宿主 Agent 自己组织答案。
+- `ask_knowledge_base`：执行完整的有界问答图并返回已校验来源。
+- `rag://sources`：读取当前文档 manifest。
 
-## 7. 核心流程
+## 测试与评测
 
-用户问题进入系统后：
+```powershell
+.\.venv\Scripts\ruff check .
+.\.venv\Scripts\ruff format --check .
+.\.venv\Scripts\pytest --cov=rag_agent --cov-report=term-missing
+```
+
+离线检索评测使用仓库内 JSONL 数据集，输出 Recall@K、MRR、nDCG 与延迟报告：
+
+```powershell
+.\.venv\Scripts\python scripts/eval_retrieval.py `
+  --file data/eval/sample_retrieval.jsonl `
+  --output-dir reports
+```
+
+`data/eval/sample_retrieval.jsonl` 只是格式示例。用于简历前，应替换或扩充为
+版本化、可公开的测试资料和 50–80 道题，并保留真实的 baseline/ablation 报告。
+
+## 项目结构
 
 ```text
-用户问题
-  ↓
-Query Rewrite：问题改写，补全检索关键词
-  ↓
-Dense Search：Qdrant 向量召回
-  ↓
-Sparse Search：SQLite FTS5 关键词召回
-  ↓
-RRF Fusion：混合召回融合
-  ↓
-CrossEncoder Rerank：二次排序
-  ↓
-Evidence Gate：判断证据是否足够
-  ↓
-Answer Generation：基于上下文生成带引用回答
+src/rag_agent/
+├── agent/          # LangGraph 状态图、提示词、引用与注入防护
+├── api/            # FastAPI、请求模型、后台任务状态
+├── evaluation/     # Recall/MRR/nDCG 指标
+├── ingest/         # 文件解析、结构化切片、幂等索引
+├── llm/            # Responses / Chat Completions 适配层
+├── mcp/            # 只读 MCP server
+├── retrieval/      # Qdrant、FTS5、加权 RRF、reranker
+└── web/            # 零构建演示界面
 ```
 
----
+## 关键设计取舍
 
-## 8. 为什么这样设计？
+- **Workflow 没有过时**：生产系统需要可重放、可测试的固定控制点；Agent 自主性只放在
+  能通过评测证明价值的节点。
+- **只保留一个编排层**：LangGraph 管理状态和循环，LLM client 只是模型传输层，
+  不再嵌套另一个 Agents SDK 循环。
+- **暂不堆多 Agent、A2A、GraphRAG**：当前问题没有独立部署的多个 Agent，也没有证据
+  表明图检索优于 Hybrid + Rerank；增加名词不等于增加项目质量。
+- **SQLite 是文本真源**：新向量先写 Qdrant，再原子替换 SQLite 文档版本，最后清理旧向量。
+  即使清理失败，无法在 SQLite 解析的孤儿向量也不会进入答案上下文。
+- **拒答是产品能力**：证据不足、引用无效或模型不可用时返回结构化拒答，而不是编造答案。
+- **有界包括四类预算**：问题/查询长度、查询变体和图重试次数、模型输出 token、
+  上传大小与数量都有显式上限。
 
-### 8.1 为什么不用纯 LangChain 一把梭？
+用户问题、有限历史和检索片段会发送到 `OPENAI_BASE_URL`。`LLM_STORE_RESPONSES=false`
+只表示请求不主动使用 Responses 存储，不代表本地推理或提供商零留存；敏感资料上线前必须
+核对所用提供商的数据政策。
 
-因为面试时只会用封装不够。这个项目把核心模块拆开：
+完整的 2026 技术更新依据和重新评估条件见
+[技术雷达](docs/technology-radar-2026.md)。
 
-- loader
-- chunker
-- vector store
-- sparse store
-- hybrid retriever
-- reranker
-- graph agent
-- API
+## 简历描述
 
-这样你能讲清楚每一层做了什么。
+可以在完成你自己的真实评测后写成：
 
-### 8.2 为什么选择 Qdrant？
+> 独立设计并实现基于 LangGraph 的有界、状态持久化 Agentic RAG 系统，完成多查询规划、
+> Dense/FTS5 混合检索、加权 RRF、CrossEncoder 重排、证据门控与服务端引用校验；
+> 通过文档哈希与原子版本替换实现幂等增量索引，并建设 FastAPI/SSE、MCP、Docker、
+> CI 和离线 Recall/MRR/nDCG 评测链路。
 
-Qdrant 本地 Docker 就能跑，API 简单，适合展示向量数据库能力。相比直接用 Chroma，它更像生产环境组件。
+不要写“准确率提升 30%”之类未经报告证明的数字。可核验的面试表达和 STAR 模板见
+[简历指南](docs/resume-guide.md)。
 
-### 8.3 为什么还要 SQLite FTS5？
+## License
 
-只做向量检索容易漏掉精确名词、编号、错误码、政策条款。关键词检索对精确匹配更强。所以这里使用 hybrid retrieval。
-
-### 8.4 为什么要 rerank？
-
-向量库第一阶段追求快，召回的结果可能相关但不准确。CrossEncoder 会把“问题 + 候选片段”一起输入模型重新打分，通常能提升最终排序质量。
-
----
-
-## 9. Chunk 调优建议
-
-在 `.env` 中调整：
-
-```env
-CHUNK_SIZE=900
-CHUNK_OVERLAP=150
-DENSE_TOP_K=40
-SPARSE_TOP_K=40
-FUSION_TOP_K=20
-RERANK_TOP_K=8
-MIN_RELEVANCE_SCORE=0.01
-```
-
-### 9.1 chunk 太小的问题
-
-优点：召回更精准。
-
-缺点：上下文不完整，模型容易缺少前因后果。
-
-适合：FAQ、短条款、接口文档。
-
-### 9.2 chunk 太大的问题
-
-优点：上下文完整。
-
-缺点：噪声多，embedding 表达不够精确，rerank 成本更高。
-
-适合：长报告、教材、业务说明。
-
-### 9.3 推荐起点
-
-中文资料：
-
-```env
-CHUNK_SIZE=700
-CHUNK_OVERLAP=120
-```
-
-英文技术文档：
-
-```env
-CHUNK_SIZE=900
-CHUNK_OVERLAP=150
-```
-
-论文 / 报告：
-
-```env
-CHUNK_SIZE=1200
-CHUNK_OVERLAP=200
-```
-
----
-
-## 10. 幻觉处理策略
-
-本项目不是简单要求模型“不要胡说”，而是做了工程约束：
-
-1. **只基于上下文回答**：prompt 明确要求不使用外部知识补全。
-2. **引用强制**：关键结论必须带 `[S1]`、`[S2]` 来源。
-3. **证据门控**：检索为空或相关性低时拒答。
-4. **低温度生成**：temperature 默认 0.1。
-5. **展示来源**：API 返回 sources，方便人工核查。
-
-注意：`MIN_RELEVANCE_SCORE` 不是固定真理。RRF 分数通常很小，reranker 分数又和模型有关，所以项目默认先设低一点，再用 `scripts/eval_retrieval.py` 根据自己的资料集调优。
-
----
-
-## 11. 检索评估
-
-准备一个 JSONL 文件，例如：
-
-```jsonl
-{"question":"系统如何降低幻觉？","expected_keywords":["证据","引用","拒答"]}
-{"question":"为什么要 rerank？","expected_keywords":["CrossEncoder","二次排序"]}
-```
-
-运行：
-
-```bash
-python scripts/eval_retrieval.py --file eval.jsonl
-```
-
-它会检查 topK 结果中是否包含预期关键词，帮助你粗略评估不同 chunk 参数的影响。
-
----
-
-## 12. 简历写法
-
-可以写成：
-
-> 基于 FastAPI + LangGraph + Qdrant 实现企业知识库 RAG Agent，支持 PDF/Word/Markdown 等多格式资料导入；设计递归 chunk 切分与 overlap 策略，结合 Qdrant 向量召回、SQLite FTS5 关键词召回、RRF 融合和 CrossEncoder rerank 提升大批量文档检索质量；通过证据门控、来源引用和低温度生成降低幻觉，并提供 RESTful API 与检索评估脚本。
-
-更朴素一点：
-
-> 参与实现企业文档智能问答系统，完成文档解析、切片、向量化、混合检索、rerank 与问答接口开发，理解 RAG 系统从资料入库到答案生成的完整流程。
-
----
-
-## 13. 面试重点
-
-面试官最可能问：
-
-1. 为什么不能直接把所有资料塞给大模型？
-2. RAG 的流程是什么？
-3. chunk size 和 overlap 怎么选？
-4. 向量检索和关键词检索有什么区别？
-5. rerank 为什么有效？
-6. 怎么判断回答是不是幻觉？
-7. 如果资料越来越多，系统瓶颈在哪里？
-8. 如果检索不到答案怎么办？
-9. 你这个 Agent 和普通 RAG 有什么区别？
-10. 你实际写了哪部分？
-
-答案见 `docs/interview.md`。
-
----
-
-## 14. 可扩展方向
-
-后续可以继续加：
-
-- 用户登录和权限控制。
-- 文件上传 API。当前版本已支持 `/upload`，后续可加异步导入进度。
-- 多租户知识库。
-- Redis 缓存热门问题。
-- Celery 异步导入大文件。
-- MinIO 存储原始文件。
-- PostgreSQL + pgvector 替换 Qdrant。
-- LangSmith / OpenTelemetry 做 tracing。
-- 前端 Vue3 管理页面。
-
+[MIT](LICENSE)

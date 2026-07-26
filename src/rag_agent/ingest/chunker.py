@@ -1,4 +1,3 @@
-
 """Chunk 切分模块。
 
 这部分是 RAG 项目的面试高频点。
@@ -13,8 +12,9 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
-from typing import Iterable
+from collections.abc import Iterable
 
 from rag_agent.schemas import Chunk, RawDocument
 
@@ -47,7 +47,7 @@ def recursive_split(text: str, chunk_size: int, separators: list[str] | None = N
     """递归切分文本。
 
     算法直觉：
-    1. 先尝试用“大的语义边界”切，比如段落。 
+    1. 先尝试用“大的语义边界”切，比如段落。
     2. 如果某一段仍然太长，再用更小的边界切，比如句号、空格。
     3. 如果还太长，最后按字符硬切。
 
@@ -117,16 +117,36 @@ def make_chunk_id(source: str, index: int, text: str, metadata: dict) -> str:
     - 不暴露原文内容。
     """
 
-    page = metadata.get("page", "")
-    raw = f"{source}|{page}|{index}|{text[:120]}"
+    identity = {
+        "source": source.replace("\\", "/"),
+        "document_id": metadata.get("document_id", ""),
+        "content_hash": metadata.get("content_hash", ""),
+        "page": metadata.get("page"),
+        "heading": metadata.get("heading"),
+        "document_unit_index": metadata.get("document_unit_index"),
+        "index": index,
+        # Hash the complete chunk. The previous 120-character prefix could
+        # collide when long chunks shared the same opening paragraph.
+        "text": text,
+    }
+    raw = json.dumps(identity, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 def chunk_document(doc: RawDocument, chunk_size: int, chunk_overlap: int) -> list[Chunk]:
     """把一个 RawDocument 切成多个 Chunk。"""
 
-    base_chunks = recursive_split(doc.text, chunk_size=chunk_size)
+    if chunk_size <= 0:
+        raise ValueError("chunk_size must be positive")
+    if chunk_overlap < 0 or chunk_overlap >= chunk_size:
+        raise ValueError("chunk_overlap must be >= 0 and smaller than chunk_size")
+
+    # Reserve room for the overlap and its newline so the final chunk respects
+    # the configured hard size budget.
+    payload_size = chunk_size if chunk_overlap == 0 else max(1, chunk_size - chunk_overlap - 1)
+    base_chunks = recursive_split(doc.text, chunk_size=payload_size)
     with_overlap = add_overlap(base_chunks, chunk_overlap)
+    with_overlap = [text[:chunk_size] for text in with_overlap]
 
     chunks: list[Chunk] = []
     source = str(doc.metadata.get("source", "unknown"))
@@ -142,6 +162,13 @@ def chunk_documents(docs: Iterable[RawDocument], chunk_size: int, chunk_overlap:
     """批量切分多个文档。"""
 
     all_chunks: list[Chunk] = []
-    for doc in docs:
-        all_chunks.extend(chunk_document(doc, chunk_size, chunk_overlap))
+    for unit_index, doc in enumerate(docs):
+        # chunk_index restarts for every RawDocument (Markdown section/PDF page).
+        # Include a stable unit ordinal so repeated headings with identical text
+        # cannot collide on the chunks primary key.
+        unit = RawDocument(
+            text=doc.text,
+            metadata={**doc.metadata, "document_unit_index": unit_index},
+        )
+        all_chunks.extend(chunk_document(unit, chunk_size, chunk_overlap))
     return all_chunks

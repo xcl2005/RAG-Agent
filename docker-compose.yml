@@ -1,9 +1,43 @@
 services:
   qdrant:
-    image: qdrant/qdrant:latest
-    container_name: rag-agent-qdrant
+    # Pin the server version so a future `latest` release cannot silently change
+    # storage format or query behavior.
+    image: qdrant/qdrant:v1.18.2
+    restart: unless-stopped
     ports:
-      - "6333:6333"
-      - "6334:6334"
+      # Bind to loopback by default; do not expose an unauthenticated vector DB.
+      - "127.0.0.1:6333:6333"
+      - "127.0.0.1:6334:6334"
     volumes:
-      - ./storage/qdrant:/qdrant/storage
+      - qdrant_storage:/qdrant/storage
+
+  api:
+    build:
+      context: .
+    restart: unless-stopped
+    depends_on:
+      - qdrant
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      API_HOST: 0.0.0.0
+      API_PORT: 8000
+      QDRANT_URL: http://qdrant:6333
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      CHAT_MODEL: ${CHAT_MODEL:-gpt-5.6-luna}
+      API_ACCESS_KEY: ${API_ACCESS_KEY:-}
+      ADMIN_API_KEY: ${ADMIN_API_KEY:-}
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      # Named volumes inherit the image directory ownership. Host bind mounts
+      # would commonly be unwritable by the non-root UID 10001 on Linux.
+      - rag_data:/app/data
+      - rag_storage:/app/storage
+
+volumes:
+  qdrant_storage:
+  rag_data:
+  rag_storage:

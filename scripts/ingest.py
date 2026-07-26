@@ -1,33 +1,47 @@
+"""Index local documents into the SQLite + Qdrant hybrid knowledge base.
 
-"""命令行导入脚本。
-
-用法：
-python scripts/ingest.py --path data/raw --reset
-
-它会调用 Indexer，把指定路径下的资料导入 SQLite + Qdrant。
+Examples:
+    python scripts/ingest.py --path data/raw
+    python scripts/ingest.py --path data/raw --force --json
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
-# 让脚本可以直接从项目根目录运行，不必先 pip install -e .
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from rag_agent.ingest.indexer import Indexer  # noqa: E402
+from rag_agent.ingest.indexer import Indexer
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Ingest documents into Qdrant and SQLite indexes.")
-    parser.add_argument("--path", default="data/raw", help="File or directory path to ingest")
-    parser.add_argument("--reset", action="store_true", help="Reset existing indexes before ingesting")
+    parser = argparse.ArgumentParser(description="Ingest documents into the hybrid index.")
+    parser.add_argument("--path", default="data/raw", help="Supported file or directory to ingest")
+    parser.add_argument("--reset", action="store_true", help="Clear both indexes before ingestion")
+    parser.add_argument("--force", action="store_true", help="Re-index unchanged documents")
+    parser.add_argument("--json", action="store_true", help="Print a formatted JSON report")
     args = parser.parse_args()
 
-    result = Indexer().ingest_path(args.path, reset=args.reset)
-    print(result)
+    indexer = Indexer()
+    try:
+        result = indexer.ingest_path(args.path, reset=args.reset, force=args.force)
+    finally:
+        indexer.close()
+
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        print(
+            "Ingestion complete: "
+            f"indexed={result['indexed_files']} "
+            f"skipped={result['skipped_files']} "
+            f"failed={result['failed_files']} "
+            f"chunks={result['chunks']}"
+        )
 
 
 if __name__ == "__main__":
