@@ -1,180 +1,512 @@
+"""SQLite metadata store and FTS5 lexical retrieval.
 
-"""SQLite 存储与关键词检索模块。
-
-这个文件做两件事：
-1. 用普通表 chunks 保存 chunk 原文和 metadata。
-2. 用 SQLite FTS5 虚拟表 chunks_fts 做关键词检索。
-
-为什么不用 Elasticsearch？
-- ES/OpenSearch 更像企业级方案，但本项目为了降低部署难度，用 SQLite FTS5。
-- 面试时可以说：如果数据量更大，可以把 SQLite FTS5 替换为 Elasticsearch / OpenSearch。
+SQLite remains intentionally small and local for a portfolio/demo deployment,
+but the implementation still applies production-minded basics: WAL mode,
+bounded lock waits, batched reads, a document manifest, and transactional
+replacement of all chunks belonging to one document.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import sqlite3
+import threading
+from collections.abc import Iterable
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable
 
 from rag_agent.schemas import Candidate, Chunk
+from rag_agent.utils.logging import get_logger
 
-# 匹配中文字符。SQLite FTS5 默认对中文分词不友好，所以这里自己补中文 bigram。
-CJK_RE = re.compile(r"[\u4e00-\u9fff]")
-
-# 匹配英文、数字、下划线、连字符组成的词。适合技术文档中的 API 名、错误码等。
+CJK_RUN_RE = re.compile(r"[\u4e00-\u9fff]+")
 WORD_RE = re.compile(r"[A-Za-z0-9_\-]{2,}")
+UPLOAD_STORED_NAME_RE = re.compile(r"^[0-9a-f]{12}-(?P<name>.+)$", re.IGNORECASE)
+logger = get_logger(__name__)
 
 
 def cjk_bigrams(text: str) -> list[str]:
-    """把中文文本转成相邻双字 token。
+    """Build bigrams inside each contiguous Chinese run.
 
-    例子：“向量数据库” -> “向量 / 量数 / 数据 / 据库”。
-    这样即使没有中文分词器，也能提高中文关键词召回率。
+    Splitting by runs prevents false tokens from being formed across punctuation
+    or paragraph boundaries.
     """
 
-    chars = CJK_RE.findall(text)
-    return [chars[i] + chars[i + 1] for i in range(len(chars) - 1)]
-
-
-def tokenize_for_fts(text: str) -> list[str]:
-    """为 FTS5 查询生成 token。"""
-
-    words = [w.lower() for w in WORD_RE.findall(text)]
-    grams = cjk_bigrams(text)
-
-    # 去重但保留顺序，避免 query 太长。
-    seen: set[str] = set()
     tokens: list[str] = []
-    for token in words + grams:
-        if token not in seen:
-            seen.add(token)
-            tokens.append(token)
+    for run in CJK_RUN_RE.findall(text):
+        if len(run) == 1:
+            tokens.append(run)
+        else:
+            tokens.extend(run[index : index + 2] for index in range(len(run) - 1))
     return tokens
 
 
-def fts_query(text: str) -> str:
-    """把用户问题转成 SQLite FTS5 的 MATCH 查询语句。
+def tokenize_for_fts(text: str) -> list[str]:
+    """Create stable lexical tokens for mixed Chinese/English technical text."""
 
-    这里用 OR 连接多个 token，目的是提高召回率。
-    RAG 检索第一阶段宁可多召回一点，再交给 reranker 精排。
-    """
+    raw_tokens = [word.lower() for word in WORD_RE.findall(text)] + cjk_bigrams(text)
+    return list(dict.fromkeys(raw_tokens))
+
+
+def fts_query(text: str) -> str:
+    """Convert user text to a safely quoted, recall-oriented FTS5 query."""
 
     tokens = tokenize_for_fts(text)
     if not tokens:
-        # 给一个几乎不可能匹配的 token，避免空查询导致 SQL 报错。
         return '"__empty_query__"'
-
-    safe = []
-    for t in tokens[:32]:
-        # FTS 查询里双引号需要转义，避免用户输入破坏查询语法。
-        t = t.replace('"', '""')
-        safe.append(f'"{t}"')
+    safe = [f'"{token.replace(chr(34), chr(34) * 2)}"' for token in tokens[:24]]
     return " OR ".join(safe)
 
 
 def search_shadow_text(text: str) -> str:
-    """为中文搜索额外加入 bigram 影子文本。
+    """Append Chinese bigrams to the indexed text without changing source text."""
 
-    入库时把原文 + 中文 bigram 一起写入 FTS 表。
-    用户搜中文词时，更容易命中。
+    return f"{text}\n\n{' '.join(cjk_bigrams(text))}"
+
+
+def display_name_from_source(source: str) -> str:
+    """Return a human-facing name without exposing upload storage prefixes.
+
+    Uploaded files use a deterministic 12-character hash prefix on disk so
+    repeated uploads of the same logical filename replace the same target.
+    That prefix is an implementation detail and should never become the title
+    shown in the UI or in citations.
     """
 
-    grams = " ".join(cjk_bigrams(text))
-    return f"{text}\n\n{grams}"
+    filename = Path(source).name or source
+    match = UPLOAD_STORED_NAME_RE.fullmatch(filename)
+    if not match:
+        return filename
+
+    stored_name = match.group("name")
+    # Old versions did not persist the original filename. For the common case
+    # where sanitization only changed spaces to underscores, the stored hash
+    # lets us recover it exactly instead of guessing. Limit the search so a
+    # malicious or unusually long filename cannot create exponential work.
+    underscore_positions = [index for index, char in enumerate(stored_name) if char == "_"]
+    if len(underscore_positions) <= 12:
+        recovered: list[str] = []
+        for mask in range(1 << len(underscore_positions)):
+            chars = list(stored_name)
+            for bit, position in enumerate(underscore_positions):
+                chars[position] = " " if mask & (1 << bit) else "_"
+            candidate = "".join(chars)
+            candidate_hash = hashlib.sha256(candidate.casefold().encode("utf-8")).hexdigest()[:12]
+            if candidate_hash == match.group(0)[:12].lower():
+                recovered.append(candidate)
+                if len(recovered) > 1:
+                    break
+        if len(recovered) == 1:
+            return recovered[0]
+    return stored_name
 
 
 class SQLiteChunkStore:
-    """SQLite chunk 仓库。"""
+    """Thread-safe local document manifest, chunk store, and lexical index."""
 
     def __init__(self, db_path: str | Path):
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-
-        # check_same_thread=False 是为了 FastAPI 多线程请求时也能使用同一个连接。
-        self.conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
+        self._lock = threading.RLock()
+        self.conn = sqlite3.connect(
+            str(self.db_path),
+            check_same_thread=False,
+            timeout=10,
+        )
         self.conn.row_factory = sqlite3.Row
+        self.conn.execute("PRAGMA journal_mode=WAL")
+        self.conn.execute("PRAGMA synchronous=NORMAL")
+        self.conn.execute("PRAGMA busy_timeout=10000")
+        self.conn.execute("PRAGMA foreign_keys=ON")
         self.init_schema()
 
     def init_schema(self) -> None:
-        """初始化表结构。"""
+        """Create the current schema and migrate the original demo schema."""
 
-        cur = self.conn.cursor()
-
-        # chunks：存真正要展示/喂给 LLM 的原文。
-        cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS chunks (
-                chunk_id TEXT PRIMARY KEY,
-                text TEXT NOT NULL,
-                source TEXT,
-                metadata TEXT NOT NULL
+        with self._lock, self.conn:
+            self.conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS documents (
+                    document_id TEXT PRIMARY KEY,
+                    source TEXT NOT NULL UNIQUE,
+                    display_name TEXT NOT NULL DEFAULT '',
+                    content_hash TEXT NOT NULL,
+                    index_fingerprint TEXT NOT NULL DEFAULT '',
+                    status TEXT NOT NULL,
+                    chunk_count INTEGER NOT NULL DEFAULT 0,
+                    error TEXT,
+                    updated_at TEXT NOT NULL
+                )
+                """
             )
-            """
-        )
-
-        # chunks_fts：FTS5 虚拟表，用于 BM25 关键词检索。
-        # chunk_id 设置为 UNINDEXED，因为它只是用来回表查原文，不参与全文检索。
-        cur.execute(
-            """
-            CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
-                chunk_id UNINDEXED,
-                text,
-                source
+            document_columns = {
+                str(row["name"]) for row in self.conn.execute("PRAGMA table_info(documents)").fetchall()
+            }
+            if "index_fingerprint" not in document_columns:
+                self.conn.execute(
+                    "ALTER TABLE documents ADD COLUMN index_fingerprint TEXT NOT NULL DEFAULT ''"
+                )
+            if "display_name" not in document_columns:
+                self.conn.execute("ALTER TABLE documents ADD COLUMN display_name TEXT NOT NULL DEFAULT ''")
+            # Older databases only know the physical upload path. Recover the
+            # readable part of those filenames during the migration so the fix
+            # is visible immediately, without forcing users to re-upload data.
+            unnamed_rows = self.conn.execute(
+                """
+                SELECT document_id, source
+                FROM documents
+                WHERE display_name IS NULL OR TRIM(display_name) = ''
+                """
+            ).fetchall()
+            for row in unnamed_rows:
+                self.conn.execute(
+                    "UPDATE documents SET display_name = ? WHERE document_id = ?",
+                    (display_name_from_source(str(row["source"])), str(row["document_id"])),
+                )
+            self.conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS chunks (
+                    chunk_id TEXT PRIMARY KEY,
+                    document_id TEXT,
+                    text TEXT NOT NULL,
+                    source TEXT,
+                    metadata TEXT NOT NULL
+                )
+                """
             )
-            """
-        )
-        self.conn.commit()
+            columns = {str(row["name"]) for row in self.conn.execute("PRAGMA table_info(chunks)").fetchall()}
+            if "document_id" not in columns:
+                self.conn.execute("ALTER TABLE chunks ADD COLUMN document_id TEXT")
+            self.conn.execute("CREATE INDEX IF NOT EXISTS idx_chunks_document_id ON chunks(document_id)")
+            self.conn.execute(
+                """
+                CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
+                    chunk_id UNINDEXED,
+                    text,
+                    source
+                )
+                """
+            )
+            # The original demo schema had no stable document identity. Keeping
+            # those rows would make a later same-source replacement leave
+            # searchable ghost chunks forever. Legacy indexes are derived data,
+            # so discard only unmigratable rows and require a clean re-ingest.
+            legacy_rows = self.conn.execute(
+                "SELECT chunk_id FROM chunks WHERE document_id IS NULL OR document_id = ''"
+            ).fetchall()
+            legacy_ids = [str(row["chunk_id"]) for row in legacy_rows]
+            if legacy_ids:
+                logger.warning(
+                    "Removing %d legacy chunk(s) without document identity; "
+                    "re-run ingestion to rebuild the knowledge index",
+                    len(legacy_ids),
+                )
+                placeholders = ",".join("?" for _ in legacy_ids)
+                self.conn.execute(
+                    f"DELETE FROM chunks_fts WHERE chunk_id IN ({placeholders})",
+                    legacy_ids,
+                )
+                self.conn.execute(
+                    f"DELETE FROM chunks WHERE chunk_id IN ({placeholders})",
+                    legacy_ids,
+                )
+
+            # Repair evidence titles from earlier upload versions as well as
+            # the manifest label. Hybrid retrieval resolves candidates through
+            # this SQLite metadata, so existing citations become readable as
+            # soon as the service restarts.
+            uploaded_documents = self.conn.execute(
+                "SELECT document_id, source, display_name FROM documents"
+            ).fetchall()
+            for document in uploaded_documents:
+                if not UPLOAD_STORED_NAME_RE.fullmatch(Path(str(document["source"])).name):
+                    continue
+                chunk_rows = self.conn.execute(
+                    "SELECT chunk_id, metadata FROM chunks WHERE document_id = ?",
+                    (str(document["document_id"]),),
+                ).fetchall()
+                for chunk_row in chunk_rows:
+                    try:
+                        metadata = json.loads(str(chunk_row["metadata"]))
+                    except json.JSONDecodeError:
+                        continue
+                    display_name = str(document["display_name"])
+                    if metadata.get("title") == display_name and metadata.get("display_name") == display_name:
+                        continue
+                    metadata["title"] = display_name
+                    metadata["display_name"] = display_name
+                    self.conn.execute(
+                        "UPDATE chunks SET metadata = ? WHERE chunk_id = ?",
+                        (
+                            json.dumps(metadata, ensure_ascii=False),
+                            str(chunk_row["chunk_id"]),
+                        ),
+                    )
 
     def reset(self) -> None:
-        """删除索引并重新建表。"""
+        """Drop local indexes. Callers must protect this destructive operation."""
 
-        cur = self.conn.cursor()
-        cur.execute("DROP TABLE IF EXISTS chunks")
-        cur.execute("DROP TABLE IF EXISTS chunks_fts")
-        self.conn.commit()
+        with self._lock, self.conn:
+            self.conn.execute("DROP TABLE IF EXISTS chunks")
+            self.conn.execute("DROP TABLE IF EXISTS chunks_fts")
+            self.conn.execute("DROP TABLE IF EXISTS documents")
         self.init_schema()
 
-    def upsert_chunks(self, chunks: Iterable[Chunk]) -> None:
-        """插入或更新 chunks。
+    def document_is_current(
+        self,
+        document_id: str,
+        content_hash: str,
+        index_fingerprint: str,
+    ) -> bool:
+        with self._lock:
+            row = self.conn.execute(
+                """
+                SELECT content_hash, index_fingerprint, status
+                FROM documents
+                WHERE document_id = ?
+                """,
+                (document_id,),
+            ).fetchone()
+        return bool(
+            row
+            and row["content_hash"] == content_hash
+            and row["index_fingerprint"] == index_fingerprint
+            and row["status"] == "ready"
+        )
 
-        同一个 chunk_id 重复导入时，用 ON CONFLICT 更新，避免重复数据。
+    def get_document(self, document_id: str) -> dict | None:
+        with self._lock:
+            row = self.conn.execute(
+                """
+                SELECT document_id, source, display_name, content_hash, index_fingerprint,
+                       status, chunk_count, error, updated_at
+                FROM documents
+                WHERE document_id = ?
+                """,
+                (document_id,),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def mark_document_failed(
+        self,
+        *,
+        document_id: str,
+        source: str,
+        content_hash: str,
+        index_fingerprint: str,
+        error: str,
+        display_name: str | None = None,
+    ) -> None:
+        """Record a per-file failure without losing the rest of an ingest batch."""
+
+        now = datetime.now(timezone.utc).isoformat()
+        resolved_display_name = display_name or display_name_from_source(source)
+        with self._lock, self.conn:
+            self.conn.execute(
+                """
+                INSERT INTO documents(
+                    document_id, source, display_name, content_hash, index_fingerprint,
+                    status, chunk_count, error, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, 'failed', 0, ?, ?)
+                ON CONFLICT(document_id) DO UPDATE SET
+                    source=excluded.source,
+                    display_name=excluded.display_name,
+                    content_hash=excluded.content_hash,
+                    index_fingerprint=excluded.index_fingerprint,
+                    status='failed',
+                    error=excluded.error,
+                    updated_at=excluded.updated_at
+                """,
+                (
+                    document_id,
+                    source,
+                    resolved_display_name,
+                    content_hash,
+                    index_fingerprint,
+                    error[:2000],
+                    now,
+                ),
+            )
+
+    def replace_document_chunks(
+        self,
+        *,
+        document_id: str,
+        source: str,
+        content_hash: str,
+        index_fingerprint: str,
+        chunks: list[Chunk],
+        display_name: str | None = None,
+    ) -> list[str]:
+        """Atomically replace the lexical/chunk side of one document.
+
+        Returns stale chunk IDs so the vector side can remove them after this
+        transaction commits.
         """
 
-        cur = self.conn.cursor()
-        for chunk in chunks:
-            source = str(chunk.metadata.get("source", ""))
-            metadata = json.dumps(chunk.metadata, ensure_ascii=False)
+        now = datetime.now(timezone.utc).isoformat()
+        resolved_display_name = display_name or display_name_from_source(source)
+        with self._lock, self.conn:
+            stale_rows = self.conn.execute(
+                "SELECT chunk_id FROM chunks WHERE document_id = ?",
+                (document_id,),
+            ).fetchall()
+            stale_ids = [str(row["chunk_id"]) for row in stale_rows]
 
-            # 先写普通表，保证可以根据 chunk_id 找回原文和 metadata。
-            cur.execute(
+            if stale_ids:
+                placeholders = ",".join("?" for _ in stale_ids)
+                self.conn.execute(
+                    f"DELETE FROM chunks_fts WHERE chunk_id IN ({placeholders})",
+                    stale_ids,
+                )
+                self.conn.execute("DELETE FROM chunks WHERE document_id = ?", (document_id,))
+
+            for chunk in chunks:
+                metadata = dict(chunk.metadata)
+                metadata["document_id"] = document_id
+                chunk.metadata = metadata
+                self.conn.execute(
+                    """
+                    INSERT INTO chunks(chunk_id, document_id, text, source, metadata)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        chunk.chunk_id,
+                        document_id,
+                        chunk.text,
+                        source,
+                        json.dumps(metadata, ensure_ascii=False),
+                    ),
+                )
+                self.conn.execute(
+                    "INSERT INTO chunks_fts(chunk_id, text, source) VALUES (?, ?, ?)",
+                    (chunk.chunk_id, search_shadow_text(chunk.text), source),
+                )
+
+            self.conn.execute(
                 """
-                INSERT INTO chunks(chunk_id, text, source, metadata)
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT(chunk_id) DO UPDATE SET
-                    text=excluded.text,
+                INSERT INTO documents(
+                    document_id, source, display_name, content_hash, index_fingerprint,
+                    status, chunk_count, error, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, 'ready', ?, NULL, ?)
+                ON CONFLICT(document_id) DO UPDATE SET
                     source=excluded.source,
-                    metadata=excluded.metadata
+                    display_name=excluded.display_name,
+                    content_hash=excluded.content_hash,
+                    index_fingerprint=excluded.index_fingerprint,
+                    status='ready',
+                    chunk_count=excluded.chunk_count,
+                    error=NULL,
+                    updated_at=excluded.updated_at
                 """,
-                (chunk.chunk_id, chunk.text, source, metadata),
+                (
+                    document_id,
+                    source,
+                    resolved_display_name,
+                    content_hash,
+                    index_fingerprint,
+                    len(chunks),
+                    now,
+                ),
             )
+        return [chunk_id for chunk_id in stale_ids if chunk_id not in {chunk.chunk_id for chunk in chunks}]
 
-            # FTS5 不支持像普通表那样优雅 upsert，所以先删后插。
-            cur.execute("DELETE FROM chunks_fts WHERE chunk_id = ?", (chunk.chunk_id,))
-            cur.execute(
-                "INSERT INTO chunks_fts(chunk_id, text, source) VALUES (?, ?, ?)",
-                (chunk.chunk_id, search_shadow_text(chunk.text), source),
+    def update_document_display_name(self, document_id: str, display_name: str) -> None:
+        """Update manifest and citation titles without rebuilding embeddings."""
+
+        with self._lock, self.conn:
+            self.conn.execute(
+                "UPDATE documents SET display_name = ? WHERE document_id = ?",
+                (display_name, document_id),
             )
-        self.conn.commit()
+            chunk_rows = self.conn.execute(
+                "SELECT chunk_id, metadata FROM chunks WHERE document_id = ?",
+                (document_id,),
+            ).fetchall()
+            for chunk_row in chunk_rows:
+                try:
+                    metadata = json.loads(str(chunk_row["metadata"]))
+                except json.JSONDecodeError:
+                    continue
+                metadata["title"] = display_name
+                metadata["display_name"] = display_name
+                self.conn.execute(
+                    "UPDATE chunks SET metadata = ? WHERE chunk_id = ?",
+                    (
+                        json.dumps(metadata, ensure_ascii=False),
+                        str(chunk_row["chunk_id"]),
+                    ),
+                )
 
-    def get_chunk(self, chunk_id: str) -> Candidate | None:
-        """根据 chunk_id 取回一个候选证据。"""
+    def delete_document(self, document_id: str) -> dict | None:
+        """Atomically remove one document manifest and every lexical chunk.
 
-        cur = self.conn.cursor()
-        row = cur.execute("SELECT * FROM chunks WHERE chunk_id = ?", (chunk_id,)).fetchone()
-        if row is None:
-            return None
+        The returned chunk IDs let the indexing service clean the corresponding
+        vector points after SQLite—the authoritative retrieval store—commits.
+        """
+
+        with self._lock, self.conn:
+            row = self.conn.execute(
+                """
+                SELECT document_id, source, display_name, content_hash,
+                       index_fingerprint, status, chunk_count, error, updated_at
+                FROM documents
+                WHERE document_id = ?
+                """,
+                (document_id,),
+            ).fetchone()
+            if row is None:
+                return None
+
+            chunk_rows = self.conn.execute(
+                "SELECT chunk_id FROM chunks WHERE document_id = ?",
+                (document_id,),
+            ).fetchall()
+            chunk_ids = [str(chunk_row["chunk_id"]) for chunk_row in chunk_rows]
+            if chunk_ids:
+                placeholders = ",".join("?" for _ in chunk_ids)
+                self.conn.execute(
+                    f"DELETE FROM chunks_fts WHERE chunk_id IN ({placeholders})",
+                    chunk_ids,
+                )
+            self.conn.execute("DELETE FROM chunks WHERE document_id = ?", (document_id,))
+            self.conn.execute("DELETE FROM documents WHERE document_id = ?", (document_id,))
+
+        result = dict(row)
+        result["chunk_ids"] = chunk_ids
+        return result
+
+    def upsert_chunks(self, chunks: Iterable[Chunk]) -> None:
+        """Compatibility helper for tests/legacy callers without a manifest."""
+
+        with self._lock, self.conn:
+            for chunk in chunks:
+                source = str(chunk.metadata.get("source", ""))
+                document_id = str(chunk.metadata.get("document_id", ""))
+                metadata = json.dumps(chunk.metadata, ensure_ascii=False)
+                self.conn.execute(
+                    """
+                    INSERT INTO chunks(chunk_id, document_id, text, source, metadata)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT(chunk_id) DO UPDATE SET
+                        document_id=excluded.document_id,
+                        text=excluded.text,
+                        source=excluded.source,
+                        metadata=excluded.metadata
+                    """,
+                    (chunk.chunk_id, document_id, chunk.text, source, metadata),
+                )
+                self.conn.execute("DELETE FROM chunks_fts WHERE chunk_id = ?", (chunk.chunk_id,))
+                self.conn.execute(
+                    "INSERT INTO chunks_fts(chunk_id, text, source) VALUES (?, ?, ?)",
+                    (chunk.chunk_id, search_shadow_text(chunk.text), source),
+                )
+
+    @staticmethod
+    def _candidate_from_row(row: sqlite3.Row) -> Candidate:
         return Candidate(
             chunk_id=row["chunk_id"],
             text=row["text"],
@@ -182,35 +514,52 @@ class SQLiteChunkStore:
             score=0.0,
         )
 
-    def get_chunks(self, chunk_ids: Iterable[str]) -> dict[str, Candidate]:
-        """批量取回 chunk，返回 {chunk_id: Candidate}。"""
+    def get_chunk(self, chunk_id: str) -> Candidate | None:
+        with self._lock:
+            row = self.conn.execute(
+                "SELECT chunk_id, text, metadata FROM chunks WHERE chunk_id = ?",
+                (chunk_id,),
+            ).fetchone()
+        return self._candidate_from_row(row) if row else None
 
-        return {cid: c for cid in chunk_ids if (c := self.get_chunk(cid)) is not None}
+    def get_chunks(self, chunk_ids: Iterable[str]) -> dict[str, Candidate]:
+        """Fetch all candidates in one query instead of the original N+1 loop."""
+
+        ids = list(dict.fromkeys(chunk_ids))
+        if not ids:
+            return {}
+        placeholders = ",".join("?" for _ in ids)
+        with self._lock:
+            rows = self.conn.execute(
+                f"SELECT chunk_id, text, metadata FROM chunks WHERE chunk_id IN ({placeholders})",
+                ids,
+            ).fetchall()
+        return {str(row["chunk_id"]): self._candidate_from_row(row) for row in rows}
 
     def search(self, query: str, limit: int = 40) -> list[Candidate]:
-        """关键词检索。
-
-        SQLite FTS5 的 bm25 分数越小表示越相关。
-        为了和其他分数展示习惯一致，这里转换成越大越好的 sparse_score。
-        """
-
         q = fts_query(query)
-        cur = self.conn.cursor()
-        rows = cur.execute(
-            """
-            SELECT c.chunk_id, c.text, c.metadata, bm25(chunks_fts) AS rank_score
-            FROM chunks_fts
-            JOIN chunks c ON c.chunk_id = chunks_fts.chunk_id
-            WHERE chunks_fts MATCH ?
-            ORDER BY rank_score ASC
-            LIMIT ?
-            """,
-            (q, limit),
-        ).fetchall()
+        with self._lock:
+            rows = self.conn.execute(
+                """
+                SELECT c.chunk_id, c.text, c.metadata, bm25(chunks_fts) AS rank_score
+                FROM chunks_fts
+                JOIN chunks c ON c.chunk_id = chunks_fts.chunk_id
+                WHERE chunks_fts MATCH ?
+                ORDER BY rank_score ASC
+                LIMIT ?
+                """,
+                (q, limit),
+            ).fetchall()
 
         candidates: list[Candidate] = []
+        query_tokens = set(tokenize_for_fts(query))
         for row in rows:
-            sparse_score = 1.0 / (1.0 + abs(float(row["rank_score"])))
+            raw_rank = float(row["rank_score"])
+            text_tokens = set(tokenize_for_fts(row["text"]))
+            # FTS5 bm25 values are ranking signals whose scale depends on the
+            # corpus. Token coverage provides a bounded, query-local signal for
+            # the evidence gate while bm25 still determines result order.
+            sparse_score = len(query_tokens & text_tokens) / len(query_tokens) if query_tokens else 0.0
             candidates.append(
                 Candidate(
                     chunk_id=row["chunk_id"],
@@ -218,26 +567,41 @@ class SQLiteChunkStore:
                     metadata=json.loads(row["metadata"]),
                     score=sparse_score,
                     sparse_score=sparse_score,
+                    debug={"bm25_raw": raw_rank},
                 )
             )
         return candidates
 
     def count(self) -> int:
-        """返回当前入库的 chunk 数量。"""
-
-        cur = self.conn.cursor()
-        return int(cur.execute("SELECT COUNT(*) FROM chunks").fetchone()[0])
+        with self._lock:
+            return int(self.conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0])
 
     def list_sources(self) -> list[dict]:
-        """按文件来源统计 chunk 数量。"""
-
-        cur = self.conn.cursor()
-        rows = cur.execute(
-            """
-            SELECT source, COUNT(*) AS chunks
-            FROM chunks
-            GROUP BY source
-            ORDER BY source
-            """
-        ).fetchall()
+        with self._lock:
+            rows = self.conn.execute(
+                """
+                SELECT document_id, source, display_name, content_hash, index_fingerprint,
+                       status, chunk_count, error, updated_at
+                FROM documents
+                ORDER BY display_name COLLATE NOCASE, source
+                """
+            ).fetchall()
         return [dict(row) for row in rows]
+
+    def ready(self) -> tuple[bool, str]:
+        try:
+            with self._lock:
+                self.conn.execute("SELECT 1").fetchone()
+            return True, "sqlite ready"
+        except sqlite3.Error as exc:  # pragma: no cover - filesystem dependent
+            return False, str(exc)
+
+    def close(self) -> None:
+        with self._lock:
+            self.conn.close()
+
+    def __enter__(self) -> SQLiteChunkStore:
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self.close()

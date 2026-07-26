@@ -1,4 +1,3 @@
-
 """文档加载模块：把不同格式文件解析成纯文本。
 
 RAG 的第一步是 ingestion，也就是“资料入库”。
@@ -11,7 +10,9 @@ RAG 的第一步是 ingestion，也就是“资料入库”。
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
+
 from bs4 import BeautifulSoup
 from docx import Document as DocxDocument
 from pypdf import PdfReader
@@ -20,6 +21,7 @@ from rag_agent.schemas import RawDocument
 
 # 项目支持的文件后缀。上传接口也会复用这个集合做校验。
 SUPPORTED_SUFFIXES = {".txt", ".md", ".pdf", ".docx", ".html", ".htm"}
+MARKDOWN_HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
 
 
 def iter_files(path: str | Path) -> list[Path]:
@@ -30,9 +32,13 @@ def iter_files(path: str | Path) -> list[Path]:
     """
 
     root = Path(path)
+    if not root.exists():
+        raise FileNotFoundError(f"ingest path does not exist: {root}")
     if root.is_file():
+        if root.suffix.lower() not in SUPPORTED_SUFFIXES:
+            raise ValueError(f"unsupported file type: {root.suffix.lower()}")
         return [root]
-    return [p for p in root.rglob("*") if p.is_file() and p.suffix.lower() in SUPPORTED_SUFFIXES]
+    return sorted(p for p in root.rglob("*") if p.is_file() and p.suffix.lower() in SUPPORTED_SUFFIXES)
 
 
 def load_text_file(path: Path) -> list[RawDocument]:
@@ -41,8 +47,41 @@ def load_text_file(path: Path) -> list[RawDocument]:
     errors="ignore" 可以跳过少量编码异常，避免一个坏字符导致整个导入失败。
     """
 
-    text = path.read_text(encoding="utf-8", errors="ignore")
-    return [RawDocument(text=text, metadata={"source": str(path), "type": path.suffix.lower()})]
+    text = path.read_text(encoding="utf-8-sig", errors="replace")
+    base_metadata = {
+        "source": str(path),
+        "title": path.name,
+        "type": path.suffix.lower(),
+    }
+    if path.suffix.lower() != ".md":
+        return [RawDocument(text=text, metadata=base_metadata)]
+
+    # Heading-aware Markdown units preserve section names in citations and keep
+    # unrelated chapters from being blended before the recursive chunker runs.
+    docs: list[RawDocument] = []
+    heading = path.stem
+    buffer: list[str] = []
+    for line in text.splitlines(keepends=True):
+        match = MARKDOWN_HEADING_RE.match(line.rstrip("\r\n"))
+        if match and buffer:
+            docs.append(
+                RawDocument(
+                    text="".join(buffer),
+                    metadata={**base_metadata, "heading": heading},
+                )
+            )
+            buffer = []
+        if match:
+            heading = match.group(2).strip()
+        buffer.append(line)
+    if buffer:
+        docs.append(
+            RawDocument(
+                text="".join(buffer),
+                metadata={**base_metadata, "heading": heading},
+            )
+        )
+    return [doc for doc in docs if doc.text.strip()]
 
 
 def load_pdf(path: Path) -> list[RawDocument]:
@@ -60,7 +99,12 @@ def load_pdf(path: Path) -> list[RawDocument]:
             docs.append(
                 RawDocument(
                     text=text,
-                    metadata={"source": str(path), "type": ".pdf", "page": i},
+                    metadata={
+                        "source": str(path),
+                        "title": path.name,
+                        "type": ".pdf",
+                        "page": i,
+                    },
                 )
             )
     return docs
@@ -73,16 +117,26 @@ def load_docx(path: Path) -> list[RawDocument]:
     """
 
     doc = DocxDocument(str(path))
-    paragraphs = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
-    text = "\n".join(paragraphs)
-    return [RawDocument(text=text, metadata={"source": str(path), "type": ".docx"})]
+    blocks = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
+    for table in doc.tables:
+        for row in table.rows:
+            values = [cell.text.strip() for cell in row.cells]
+            if any(values):
+                blocks.append(" | ".join(values))
+    text = "\n".join(blocks)
+    return [
+        RawDocument(
+            text=text,
+            metadata={"source": str(path), "title": path.name, "type": ".docx"},
+        )
+    ]
 
 
 def load_html(path: Path) -> list[RawDocument]:
     """加载 HTML，并尽量只保留正文。"""
 
-    html = path.read_text(encoding="utf-8", errors="ignore")
-    soup = BeautifulSoup(html, "lxml")
+    html_text = path.read_text(encoding="utf-8-sig", errors="replace")
+    soup = BeautifulSoup(html_text, "lxml")
 
     # 网页里的脚本、样式、导航、页脚通常不是知识内容，会污染检索。
     for tag in soup(["script", "style", "nav", "footer"]):
@@ -90,7 +144,13 @@ def load_html(path: Path) -> list[RawDocument]:
 
     text = soup.get_text("\n")
     lines = [line.strip() for line in text.splitlines() if line.strip()]
-    return [RawDocument(text="\n".join(lines), metadata={"source": str(path), "type": path.suffix.lower()})]
+    title = soup.title.get_text(strip=True) if soup.title else path.name
+    return [
+        RawDocument(
+            text="\n".join(lines),
+            metadata={"source": str(path), "title": title, "type": path.suffix.lower()},
+        )
+    ]
 
 
 def load_document(path: str | Path) -> list[RawDocument]:

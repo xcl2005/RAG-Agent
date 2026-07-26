@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Adaptive RAG Agent：混合检索、证据门控、可验证引用与可恢复工作流"
+    />
+    <meta name="theme-color" content="#f6f8fc" />
+    <title>Adaptive RAG · Evidence Workbench</title>
+    <link rel="stylesheet" href="/static/styles.css?v=20260727" />
+  </head>
+  <body>
+    <button
+      id="sidebarBackdrop"
+      class="drawer-backdrop"
+      type="button"
+      aria-label="关闭当前面板"
+      tabindex="-1"
+    ></button>
+
+    <div class="app-shell">
+      <aside id="sidebar" class="sidebar" aria-label="知识库">
+        <header class="brand">
+          <div class="brand-mark" aria-hidden="true"><span>AR</span></div>
+          <div class="brand-copy">
+            <strong>Adaptive RAG</strong>
+            <span>Knowledge Workspace</span>
+          </div>
+          <span class="build-tag">PORTFOLIO</span>
+          <button id="sidebarClose" class="icon-button mobile-only" type="button" aria-label="关闭侧栏">
+            ×
+          </button>
+        </header>
+
+        <div class="sidebar-scroll">
+          <section
+            class="runtime-row"
+            role="status"
+            aria-live="polite"
+            aria-labelledby="runtimeTitle"
+          >
+            <span id="statusDot" class="status-dot status-checking" aria-hidden="true"></span>
+            <div>
+              <strong id="runtimeTitle">服务状态</strong>
+              <span id="statusDetail">正在连接后端…</span>
+            </div>
+            <span id="statusBadge" class="badge badge-muted">检查中</span>
+          </section>
+
+          <details class="side-section upload-section">
+            <summary>
+              <span class="summary-icon" aria-hidden="true">＋</span>
+              <span>
+                <strong>添加资料</strong>
+                <small>上传并建立检索索引</small>
+              </span>
+              <span class="summary-arrow" aria-hidden="true">⌄</span>
+            </summary>
+            <div class="section-body">
+              <label
+                id="uploadDropzone"
+                class="upload-box"
+                for="fileInput"
+                role="button"
+                tabindex="0"
+              >
+                <span class="upload-glyph" aria-hidden="true">↥</span>
+                <strong>拖放文件，或点击选择</strong>
+                <small id="uploadLimits">PDF · DOCX · MD · TXT · HTML · 最多 10 个 / 单文件 20 MB</small>
+              </label>
+              <input
+                id="fileInput"
+                type="file"
+                tabindex="-1"
+                multiple
+                accept=".pdf,.docx,.md,.txt,.html,.htm"
+              />
+              <div id="selectedFiles" class="file-list muted">尚未选择文件</div>
+              <button id="uploadButton" class="button button-primary full-width" type="button" disabled>
+                上传并索引
+              </button>
+              <div id="jobStatus" class="job-status" aria-live="polite"></div>
+            </div>
+          </details>
+
+          <section class="side-section library-section" aria-labelledby="libraryTitle">
+            <header class="section-heading">
+              <div>
+                <span class="section-kicker">KNOWLEDGE</span>
+                <h2 id="libraryTitle">资料库</h2>
+              </div>
+              <div class="heading-actions">
+                <span id="sourceCount" class="count-badge">0</span>
+                <button id="refreshSources" class="icon-button" type="button" title="刷新来源" aria-label="刷新来源">
+                  ↻
+                </button>
+              </div>
+            </header>
+            <div
+              id="sourceActionStatus"
+              class="source-action-status"
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+            ></div>
+            <div id="sourceRegistry" class="source-registry muted">暂无来源</div>
+          </section>
+
+          <details id="connectionSettings" class="side-section connection-section settings">
+            <summary>
+              <span class="summary-icon key-icon" aria-hidden="true">⌁</span>
+              <span>
+                <strong>连接设置</strong>
+                <small>本地应用密钥，不是 GLM 模型 Key</small>
+              </span>
+              <span class="summary-arrow" aria-hidden="true">⌄</span>
+            </summary>
+            <div class="section-body">
+              <label for="apiKey">API_ACCESS_KEY（本地）</label>
+              <div class="secret-input">
+                <input
+                  id="apiKey"
+                  type="password"
+                  autocomplete="off"
+                  spellcheck="false"
+                  placeholder="粘贴本地 API_ACCESS_KEY"
+                />
+                <button id="toggleApiKey" class="text-button" type="button" aria-label="显示 API Key">
+                  显示
+                </button>
+              </div>
+              <small>用于访问本机 RAG API，仅保存在当前浏览器会话中。</small>
+            </div>
+          </details>
+        </div>
+
+        <footer class="interface-list" aria-label="可用接口">
+          <span>INTERFACES</span>
+          <div>
+            <strong>Web</strong>
+            <span>CLI</span>
+            <a href="/docs" target="_blank" rel="noreferrer">API ↗</a>
+            <span>MCP</span>
+          </div>
+        </footer>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div class="topbar-left">
+            <button
+              id="sidebarToggle"
+              class="icon-button mobile-only"
+              type="button"
+              aria-label="打开知识库侧栏"
+              aria-controls="sidebar"
+              aria-expanded="false"
+            >
+              ☰
+            </button>
+            <div>
+              <span class="page-kicker">Adaptive RAG / 知识问答</span>
+              <h1>有据可查的知识问答</h1>
+            </div>
+          </div>
+          <div class="topbar-actions">
+            <span id="threadLabel" class="thread-pill">新会话</span>
+            <button
+              id="inspectorToggle"
+              class="button button-quiet inspector-toggle"
+              type="button"
+              aria-controls="inspector"
+              aria-expanded="false"
+            >
+              证据面板
+            </button>
+            <button id="newThread" class="button button-quiet" type="button">新建会话</button>
+          </div>
+        </header>
+
+        <section
+          id="conversation"
+          class="conversation"
+          role="log"
+          aria-relevant="additions"
+          aria-label="问答记录"
+        >
+          <article class="welcome-card" aria-labelledby="welcomeTitle">
+            <div class="welcome-icon" aria-hidden="true">✦</div>
+            <div class="welcome-copy">
+              <span class="eyebrow">可信知识工作台</span>
+              <h2 id="welcomeTitle">从你的资料里，找到有依据的答案</h2>
+              <p>
+                每个回答都经过混合检索、证据门控与引用校验；证据不足时，
+                系统会明确说明，而不是编造答案。
+              </p>
+            </div>
+
+            <div class="prompt-list" aria-label="示例问题">
+              <button class="prompt-chip" type="button" data-question="解释这个系统的证据门控机制">
+                <span class="prompt-copy">
+                  <strong>解释证据门控机制</strong>
+                  <small>系统何时回答，何时拒答？</small>
+                </span>
+                <span class="prompt-arrow" aria-hidden="true">→</span>
+              </button>
+              <button class="prompt-chip" type="button" data-question="Dense 检索与 FTS5 各自解决什么问题？">
+                <span class="prompt-copy">
+                  <strong>比较 Dense 与 FTS5</strong>
+                  <small>两种检索方式如何互补？</small>
+                </span>
+                <span class="prompt-arrow" aria-hidden="true">→</span>
+              </button>
+              <button class="prompt-chip" type="button" data-question="展示一次完整问答经过了哪些工作流节点">
+                <span class="prompt-copy">
+                  <strong>查看工作流执行路径</strong>
+                  <small>追踪节点状态与耗时。</small>
+                </span>
+                <span class="prompt-arrow" aria-hidden="true">→</span>
+              </button>
+            </div>
+          </article>
+        </section>
+
+        <section class="composer" aria-label="提问">
+          <div class="composer-shell">
+            <textarea
+              id="questionInput"
+              rows="1"
+              maxlength="4000"
+              aria-label="输入问题"
+              aria-describedby="composerHint"
+              placeholder="向知识库提问…"
+            ></textarea>
+            <button id="askButton" class="send-button" type="button" title="发送问题" aria-label="发送问题">
+              <span>发送</span>
+              <span aria-hidden="true">↗</span>
+            </button>
+          </div>
+          <div id="composerHint" class="composer-meta">
+            <label><input id="includeTrace" type="checkbox" checked /> 保留运行追踪</label>
+            <span><kbd>Enter</kbd> 发送 · <kbd>Shift</kbd> + <kbd>Enter</kbd> 换行</span>
+          </div>
+        </section>
+      </main>
+
+      <aside id="inspector" class="inspector" aria-label="证据与运行详情">
+        <header class="inspector-header">
+          <div class="inspector-tabs" role="tablist" aria-label="详情面板">
+            <button
+              id="evidenceTab"
+              class="inspector-tab active"
+              type="button"
+              role="tab"
+              tabindex="0"
+              aria-selected="true"
+              aria-controls="evidencePanel"
+              data-inspector-tab="evidence"
+            >
+              证据
+            </button>
+            <button
+              id="runTab"
+              class="inspector-tab"
+              type="button"
+              role="tab"
+              tabindex="-1"
+              aria-selected="false"
+              aria-controls="runPanel"
+              data-inspector-tab="run"
+            >
+              运行
+            </button>
+          </div>
+          <button id="inspectorClose" class="icon-button inspector-close" type="button" aria-label="关闭详情面板">
+            ×
+          </button>
+        </header>
+
+        <section
+          id="evidencePanel"
+          class="inspector-panel"
+          role="tabpanel"
+          aria-labelledby="evidenceTab"
+        >
+          <div id="evidenceInspector" class="inspector-empty">
+            <span class="empty-glyph" aria-hidden="true">◫</span>
+            <strong>暂无证据</strong>
+            <p>完成一次有依据的回答后，来源片段会显示在这里。</p>
+          </div>
+        </section>
+
+        <section
+          id="runPanel"
+          class="inspector-panel"
+          role="tabpanel"
+          aria-labelledby="runTab"
+          hidden
+        >
+          <div id="traceInspector" class="inspector-empty">
+            <span class="empty-glyph" aria-hidden="true">⌁</span>
+            <strong>工作流将在这里展开</strong>
+            <p>提问后实时显示每个 Agent 节点的状态与耗时。</p>
+            <ol class="workflow-preview" aria-label="工作流预览">
+              <li>规划</li>
+              <li>检索</li>
+              <li>门控</li>
+              <li>生成</li>
+              <li>校验</li>
+            </ol>
+          </div>
+        </section>
+      </aside>
+    </div>
+
+    <dialog id="deleteSourceDialog" class="confirm-dialog" aria-labelledby="deleteDialogTitle">
+      <div class="confirm-dialog-body">
+        <div class="confirm-dialog-icon" aria-hidden="true">−</div>
+        <div>
+          <span class="dialog-kicker">从资料库移除</span>
+          <h2 id="deleteDialogTitle">删除这份资料？</h2>
+          <p>
+            “<strong id="deleteSourceName"></strong>”的文本索引、向量和受管上传文件会一并删除。
+            此操作无法撤销。
+          </p>
+          <div id="deleteSourceMeta" class="delete-source-meta"></div>
+          <div id="deleteSourceStatus" class="dialog-status" role="alert" aria-live="assertive"></div>
+        </div>
+      </div>
+      <div class="confirm-dialog-actions">
+        <button id="cancelDeleteSource" class="button button-quiet" type="button" autofocus>
+          取消
+        </button>
+        <button id="confirmDeleteSource" class="button button-danger" type="button">
+          删除资料
+        </button>
+      </div>
+    </dialog>
+
+    <template id="answerTemplate">
+      <article class="message assistant-message">
+        <header class="message-header">
+          <div class="message-author">
+            <span class="avatar" aria-hidden="true">AR</span>
+            <div>
+              <strong>Adaptive RAG</strong>
+              <span>Grounded response</span>
+            </div>
+          </div>
+          <span class="answer-status badge"></span>
+        </header>
+        <div class="answer-copy"></div>
+        <div class="answer-stats"></div>
+        <footer class="message-actions">
+          <button class="text-button evidence-button" type="button">查看证据</button>
+          <button class="text-button run-details-button" type="button">运行详情</button>
+        </footer>
+      </article>
+    </template>
+
+    <script src="/static/ui_helpers.js?v=20260727" defer></script>
+    <script src="/static/app.js?v=20260727" defer></script>
+  </body>
+</html>

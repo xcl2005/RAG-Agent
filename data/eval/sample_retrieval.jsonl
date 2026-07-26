@@ -1,3 +1,4 @@
-{"question":"这个系统如何降低幻觉？","expected_keywords":["证据","引用","拒答"]}
-{"question":"为什么要使用 rerank？","expected_keywords":["CrossEncoder","二次排序"]}
-{"question":"系统如何处理中文关键词检索？","expected_keywords":["SQLite","FTS5","bigram"]}
+{"id":"grounding-001","question":"这个系统如何降低回答幻觉？","relevant_sources":["sample.md"],"expected_keywords":["证据","引用"],"should_answer":true,"tags":["semantic","grounding"]}
+{"id":"retrieval-001","question":"为什么不能只使用向量检索？","relevant_sources":["sample.md"],"expected_keywords":["关键词","混合检索"],"should_answer":true,"tags":["hybrid"]}
+{"id":"rerank-001","question":"CrossEncoder 在检索流程中负责什么？","relevant_sources":["sample.md"],"expected_keywords":["rerank","精排"],"should_answer":true,"tags":["exact-term"]}
+{"id":"abstain-001","question":"公司的 2027 年销售奖金比例是多少？","relevant_sources":[],"expected_keywords":[],"should_answer":false,"tags":["unanswerable"]}
