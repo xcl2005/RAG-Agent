@@ -123,18 +123,47 @@ Teach in this order:
 
 ```text
 why the problem exists
+→ visual model / diagram
 → intuition
 → principle
 → small example
 → real repository code
 → run it
 → expected result
+→ deliberately break it
+→ explain the failure
 → modify one variable
-→ common failures
 → trade-off
 → why hiring interviews care
 → how to explain it
 ```
+
+The current textbook uses `data/tutorial/expense_policy.md` as a single fictional public case. Prefer extending that same case over inventing unrelated examples in every chapter.
+
+### Visual pedagogy is a requirement, not decoration
+
+Use GitHub-native Mermaid when a concept benefits from structure or flow. Prefer diagrams for:
+
+- RAG ingestion/retrieval/generation flow
+- sparse vs dense vs fusion vs rerank
+- LangGraph state transitions
+- Tool Calling / Registry / validation / timeout
+- State vs Checkpoint vs History vs Memory vs Context
+- API/SSE request lifecycle
+- queue/worker/durable task
+- retry/deadline/failure paths
+- permission/HITL/sandbox boundaries
+- eval/trace/observability
+- backend system design
+
+Do not copy diagrams or images from external tutorials. Learn from good official explanations, then redraw concepts around this repository.
+
+Every major concept should move the learner through four levels:
+
+1. `看懂` — explain it in their own words.
+2. `能跑` — reproduce a real repository path/test/CLI.
+3. `能改` — change a parameter or implementation and explain the effect.
+4. `能独立实现` — build a small version from a blank file.
 
 Teach first; practice second; test/quiz last. Never use an unimplemented capability as if the project already supports it.
 
@@ -160,6 +189,7 @@ For each algorithm family, prefer:
 
 ```text
 recognition signal
+→ visual model
 → core invariant
 → template
 → representative problems
@@ -169,6 +199,14 @@ recognition signal
 → backend/Agent transfer
 → spaced re-write standard
 ```
+
+Explicitly connect algorithms to engineering where useful, for example:
+
+- Sliding Window → rate limiting
+- Heap → TopK / priority tasks
+- Topological Sort → workflow DAG
+- LRU → caches
+- Queue → workers/backpressure
 
 Keep the question set driven by current interview evidence, not by arbitrary total problem count.
 
