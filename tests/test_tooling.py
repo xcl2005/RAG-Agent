@@ -135,9 +135,12 @@ def test_bounded_tool_agent_executes_tool_then_finishes():
                 action="tool",
                 tool_name="echo_text",
                 arguments_json='{"text":"evidence"}',
+                final_answer="",
             ),
             ToolDecision(
                 action="final",
+                tool_name="",
+                arguments_json="{}",
                 final_answer="Used the validated tool result.",
             ),
         ]
@@ -169,6 +172,7 @@ def test_bounded_tool_agent_rejects_bad_argument_json_and_stops():
                 action="tool",
                 tool_name="echo_text",
                 arguments_json="[]",
+                final_answer="",
             )
         ]
     )

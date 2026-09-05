@@ -38,9 +38,9 @@ class ToolDecision(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     action: Literal["tool", "final"]
-    tool_name: str = ""
-    arguments_json: str = "{}"
-    final_answer: str = ""
+    tool_name: str
+    arguments_json: str
+    final_answer: str
 
 
 @dataclass(slots=True)
@@ -129,12 +129,10 @@ class ToolRegistry:
         try:
             parsed = tool.args_model.model_validate(arguments)
         except ValidationError as exc:
-            # Validation details are safe because they describe the public tool schema,
-            # not provider internals or retrieved private document text.
             return ToolExecution(
                 tool_name=name,
                 status="invalid_arguments",
-                output=exc.errors(include_url=False).__repr__(),
+                output=repr(exc.errors(include_url=False)),
                 latency_ms=round((time.perf_counter() - started) * 1000, 2),
                 error_type="ValidationError",
             )
