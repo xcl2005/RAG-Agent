@@ -1,1330 +1,1440 @@
 # Agent Backend / AI Application 面试算法与 Coding 手册
 
-> 版本：2026-09-06，第二版。
->
+> 版本：2026-09-06，第三版（图解训练版）  
 > 目标岗位：Agent Backend、AI Application Engineer、大模型应用研发、LLM Application Engineer、AI 全栈偏后端、Data/Search/Knowledge Agent、Agent Runtime 初级岗位。
->
-> 目标不是“刷题数量好看”，而是形成能通过笔试、手撕、后端追问、AI Coding 和项目深挖的一整套能力。
 
-# 0. 先给结论：Hot 100 很重要，但绝对不是全部
+这份文档不是“LeetCode 题号仓库”。它解决三个问题：
 
-对于本项目目标岗位，建议把面试准备看成 8 块：
+1. 你看到题时怎么识别模式。
+2. 这些算法为什么会出现在 Backend / Agent 面试里。
+3. 怎么从“刷过”变成“现场能写、能解释、能迁移到工程”。
+
+结论先写：
+
+> **Hot 100 是非常好的算法主干，但不足以覆盖完整 Agent Backend 面试。**
+
+完整准备应是：
 
 ```text
-1. LeetCode Hot 100 主模式
-2. Hot 100 外的公司高频补充
-3. ACM 输入输出 / 限时笔试
-4. SQL
-5. Backend Coding 手撕
-6. CS 基础八股
-7. System Design
-8. RAG / Agent / AI Coding + 项目深挖
+Hot 100 主模式
++ 高频补充算法
++ ACM 输入输出
++ SQL
++ Backend Coding
++ CS 基础
++ System Design
++ RAG / Agent / AI Coding
 ```
-
-如果只刷 Hot 100，你会缺：
-
-- SQL
-- Redis / MySQL / 网络 / OS
-- LRU 之外的工程组件
-- 限流 / retry / timeout / queue
-- SSE / FastAPI
-- Tool Calling / Agent loop
-- System Design
-- Agent/RAG 项目追问
-
-如果完全不刷算法，只会讲 Agent 项目，也容易在第一轮手撕直接挂掉。
-
-因此最合理策略是：
-
-> **Hot100 打底 + 高频补充 + 工程手撕 + AI Coding。**
 
 ---
 
-# 1. 如何使用这份文档
+# 0. 一张图看懂训练体系
 
-不要按 LeetCode 页面随机刷。
+```mermaid
+flowchart TD
+    A[数据结构算法] --> B[Hot100 主模式]
+    B --> C[公司补充题]
+    C --> D[ACM 限时笔试]
 
-每个题型都走：
+    E[Backend 基础] --> F[SQL / Redis / Network / OS]
+    F --> G[Backend Coding 手撕]
+
+    H[AI Application] --> I[RAG / Tool / Agent Coding]
+
+    D --> J[面试 Coding 能力]
+    G --> J
+    I --> J
+    J --> K[System Design + 项目深挖]
+```
+
+你不是要成为竞赛选手，而是要做到：
+
+- 中等算法题大部分能独立写；
+- 能写 SQL；
+- 能手撕几个典型后端组件；
+- 能在 30–60 分钟做一个小型 AI Backend 功能；
+- 能解释复杂度、边界、并发与 trade-off。
+
+---
+
+# 1. 一道题怎样才算“会”
+
+建议每题用四级状态：
+
+- `A`：完全不会；
+- `B`：看解析能理解；
+- `C`：当天能从空白写；
+- `D`：一周后还能从空白写，并能处理一个变化题。
+
+P0 题最终应尽量达到 `D`。
+
+每题固定训练：
 
 ```text
 识别信号
-→ 核心不变量/思路
-→ 最小模板
-→ 代表题
-→ 不看答案重写
+→ 口述思路
+→ 写代码
+→ 手测边界
 → 复杂度
-→ 变化题
-→ 工程迁移
+→ 面试官改条件
+→ 一周后复写
 ```
 
-一道题只有达到下面标准才算“会”：
-
-- 看到题能判断大类。
-- 先口述方案再写代码。
-- 不看答案从空白编辑器写出。
-- 能解释时间/空间复杂度。
-- 能主动测 2–3 个边界。
-- 一周后还能重写。
-- 面试官改一个条件时能继续推。
-
-建议状态：
-
-- `A`：完全不会
-- `B`：看解析能理解
-- `C`：当天可独立写
-- `D`：一周后可独立写 + 能讲变化
-
-真正面试目标是 P0 题大部分达到 `D`。
+最重要：**不要把“AC 过一次”当成掌握。**
 
 ---
 
-# 2. 推荐训练顺序
+# 2. 推荐学习顺序
 
-## Phase 1：基础模式
+```mermaid
+flowchart LR
+    A[Array / Hash] --> B[Two Pointers]
+    B --> C[Sliding Window]
+    C --> D[Prefix Sum]
+    D --> E[Linked List]
+    E --> F[Stack / Queue]
+    F --> G[Tree / BST]
+    G --> H[Heap / TopK]
+    H --> I[Binary Search]
+    I --> J[Graph DFS/BFS]
+    J --> K[Topo / Union Find]
+    K --> L[Backtracking]
+    L --> M[Greedy]
+    M --> N[DP]
+    N --> O[Interval / Monotonic]
+    O --> P[Trie / LRU / Engineering]
+```
 
-1. Array / Hash
-2. Two Pointers
-3. Sliding Window
-4. Prefix Sum
-5. Linked List
-6. Stack / Queue
-
-## Phase 2：树、堆、二分
-
-7. Binary Tree / BST
-8. Heap / TopK
-9. Binary Search
-
-## Phase 3：图与搜索
-
-10. DFS / BFS
-11. Topological Sort
-12. Union Find
-13. Backtracking
-
-## Phase 4：高级高频
-
-14. Greedy
-15. Dynamic Programming
-16. Interval
-17. Monotonic Stack / Queue
-18. Trie / LRU
-
-## Phase 5：公司补充
-
-19. Sorting
-20. Shortest Path
-21. Bit Manipulation
-22. Difference Array
-23. String basics
-24. ACM I/O
-
-## Phase 6：工程面试
-
-25. SQL
-26. Backend hand-coding
-27. CS fundamentals
-28. System Design
-
-## Phase 7：AI Coding
-
-29. FastAPI
-30. SSE
-31. Tool Calling
-32. Simple RAG
-33. Agent State
-34. Reliability / Eval
+不要按 LeetCode 首页随机刷。
 
 ---
 
-# Part A：LeetCode 主干题单
+# Part A：算法主干
 
 # 3. Array / Hash
 
-识别信号：
+## 3.1 识别信号
 
-- 是否出现过
-- 次数统计
-- 去重
-- 两数关系
-- 分组
-- O(1) 成员查找
+看到：
 
-## P0
+- “是否出现过”；
+- “次数”；
+- “去重”；
+- “配对”；
+- “按某种特征分组”；
 
-- 1 Two Sum
-- 49 Group Anagrams
-- 128 Longest Consecutive Sequence
-- 217 Contains Duplicate
-- 242 Valid Anagram
+先想 HashMap / Set。
 
-## P1
-
-- 347 Top K Frequent Elements
-- 36 Valid Sudoku
-- 238 Product of Array Except Self
-
-核心：Python `dict` / `set` 平均查找 O(1)，不是数学意义上的任何情况下恒定 O(1)。
-
-最小模式：
-
-```python
-seen = {}
-for i, x in enumerate(nums):
-    if target - x in seen:
-        return [seen[target - x], i]
-    seen[x] = i
+```mermaid
+flowchart LR
+    X[当前元素 x] --> NEED[target - x]
+    NEED --> Q{seen 里有吗?}
+    Q -->|yes| A[得到答案]
+    Q -->|no| S[记录 x]
 ```
 
-工程迁移：cache key、dedup、idempotency key、frequency counter。
+### P0 题
+
+- LC 1 Two Sum
+- LC 49 Group Anagrams
+- LC 128 Longest Consecutive Sequence
+- LC 347 Top K Frequent Elements
+
+### 你必须知道
+
+Python `dict/set` 平均查找通常 O(1)，不是所有极端情况下绝对 O(1)。
+
+### 最小模板
+
+```python
+def two_sum(nums, target):
+    seen = {}
+    for i, x in enumerate(nums):
+        need = target - x
+        if need in seen:
+            return [seen[need], i]
+        seen[x] = i
+    return []
+```
+
+### 面试变化
+
+如果数组有序？
+
+→ 可以进一步想到双指针，不一定需要 Hash。
 
 ---
 
 # 4. Two Pointers
 
-识别信号：
+## 4.1 关键不是“两根指针”，而是排除不可能答案
 
-- 有序数组
-- 两端往中间
-- 原地去重/移动
-- 快慢指针
+```mermaid
+flowchart LR
+    L[Left] --> ARR[有序/结构化区间]
+    ARR --> R[Right]
+```
 
-## P0
+每移动一次指针，都应该有理由：
 
-- 283 Move Zeroes
-- 11 Container With Most Water
-- 15 3Sum
-- 125 Valid Palindrome
+> “为什么移动它不会漏掉最优答案？”
 
-## P1
+### P0 题
 
-- 167 Two Sum II
-- 42 Trapping Rain Water
+- LC 283 Move Zeroes
+- LC 11 Container With Most Water
+- LC 15 3Sum
+- LC 42 Trapping Rain Water
 
-核心问题：**为什么移动这一边能排除一批答案？**
+### 迁移
+
+链表快慢指针也属于双指针思想：
+
+- 判环；
+- 找中点；
+- 倒数第 N 个节点。
 
 ---
 
 # 5. Sliding Window
 
-识别信号：
+这是**算法 → Backend** 最重要的迁移之一。
 
-- 连续子数组 / 子串
-- 最长 / 最短
-- 最近 N 个 / N 秒
-- 窗口内满足约束
+## 5.1 识别信号
 
-## P0
+- 连续子串/子数组；
+- 最长/最短；
+- 窗口满足某条件；
+- “最近 N 秒”的请求。
 
-- 3 Longest Substring Without Repeating Characters
-- 438 Find All Anagrams in a String
-- 209 Minimum Size Subarray Sum
+```mermaid
+flowchart LR
+    A[a] --> B[b]
+    B --> C[c]
+    C --> D[a]
+    D --> E[b]
 
-## P1
+    L[Left] -.窗口.-> D
+    R[Right] -.扩张.-> E
+```
 
-- 76 Minimum Window Substring
-- 239 Sliding Window Maximum
-- 424 Longest Repeating Character Replacement
-
-通用框架：
+通用模板：
 
 ```python
 left = 0
 for right, x in enumerate(data):
     add(x)
-    while invalid():
+    while window_invalid():
         remove(data[left])
         left += 1
     update_answer(left, right)
 ```
 
-必须能回答：
+### P0 题
 
-- 为什么是 `while` 而不是 `if`？
-- 什么情况下答案在收缩前更新？
-- 窗口状态如何 O(1) 更新？
+- LC 3 Longest Substring Without Repeating Characters
+- LC 438 Find All Anagrams in a String
+- LC 76 Minimum Window Substring
+- LC 239 Sliding Window Maximum
 
-工程迁移：sliding-window rate limiter。
+### 真正要会
+
+1. 什么时候扩张？
+2. 什么时候收缩？
+3. `while` 为什么不能换成 `if`？
+4. 答案是在收缩前还是收缩后更新？
+
+## 5.2 工程迁移：Rate Limiter
+
+算法题：
+
+> 连续窗口内满足条件。
+
+Backend：
+
+> 最近 60 秒请求不能超过 100 次。
+
+```mermaid
+flowchart LR
+    R[新请求时间 now] --> CLEAN[删除窗口外旧时间]
+    CLEAN --> COUNT{窗口内数量 < limit?}
+    COUNT -->|yes| ALLOW[允许并记录]
+    COUNT -->|no| DENY[拒绝]
+```
+
+因此面试官让你“手写滑动窗口限流”，本质上不是一个陌生题。
 
 ---
 
 # 6. Prefix Sum / Difference
 
-识别信号：
+## 6.1 为什么需要 Prefix Sum
 
-- 区间和
-- 连续子数组统计
-- 多次区间查询
-- 多次区间加减
+如果频繁问：
 
-## P0
+> `nums[l:r]` 的和？
 
-- 560 Subarray Sum Equals K
-- 724 Find Pivot Index
+每次 O(n) 重算太慢。
 
-## P1
+```text
+prefix[i] = nums[0] + ... + nums[i-1]
+range(l, r) = prefix[r+1] - prefix[l]
+```
 
-- 304 Range Sum Query 2D
-- 525 Contiguous Array
-- 1109 Corporate Flight Bookings（差分）
+### P0/P1
 
-重要：存在负数时，很多“和等于 K”问题不能简单用滑动窗口。
+- LC 560 Subarray Sum Equals K
+- LC 238 Product of Array Except Self（前后缀思想）
+- 二维前缀和
+- Difference Array
 
-工程迁移：时间区间统计、批量配置变更、监控指标区间累积。
+### 高频陷阱
+
+数组有负数时，很多问题不能用“只向右”的滑动窗口解决。
 
 ---
 
 # 7. Linked List
 
-## P0
+链表题的难点常常不是算法，而是**指针状态容易丢**。
 
-- 206 Reverse Linked List
-- 21 Merge Two Sorted Lists
-- 141 Linked List Cycle
-- 160 Intersection of Two Linked Lists
-- 19 Remove Nth Node From End
-- 2 Add Two Numbers
+## 7.1 Reverse Linked List 图解
 
-## P1
+```mermaid
+flowchart LR
+    N[None] <-- P1[1]
+    P1 -.next before change.-> P2[2]
+    P2 --> P3[3]
+    P3 --> X[None]
+```
 
-- 24 Swap Nodes in Pairs
-- 25 Reverse Nodes in K-Group
-- 138 Copy List with Random Pointer
+每一步牢记：
 
-习惯：删除/插入头部时优先考虑 dummy node。
+```text
+next_node = curr.next
+curr.next = prev
+prev = curr
+curr = next_node
+```
 
-必须会解释：
+### P0 题
 
-- random access 为什么 O(n)
-- 已知节点位置时插删为什么可 O(1)
-- 链表与数组的 cache locality 区别
+- LC 206 Reverse Linked List
+- LC 21 Merge Two Sorted Lists
+- LC 141 Linked List Cycle
+- LC 160 Intersection of Two Linked Lists
+- LC 19 Remove Nth Node From End
+- LC 2 Add Two Numbers
+
+### P1
+
+- LC 25 Reverse Nodes in k-Group
+- LC 138 Copy List with Random Pointer
+
+### 必会技巧
+
+Dummy node 能减少“头节点要特殊处理”的分支。
 
 ---
 
 # 8. Stack / Queue / Monotonic Structure
 
-## P0
+## 8.1 Stack
 
-- 20 Valid Parentheses
-- 155 Min Stack
-- 739 Daily Temperatures
-- 394 Decode String
+适合：
 
-## P1
+- 括号匹配；
+- 后进先出；
+- 递归过程显式化。
 
-- 84 Largest Rectangle in Histogram
-- 239 Sliding Window Maximum
-- 402 Remove K Digits
+P0：
 
-单调栈信号：
+- LC 20 Valid Parentheses
+- LC 155 Min Stack
 
-> 对每个元素找左/右第一个更大/更小。
+## 8.2 Monotonic Stack
 
-单调队列信号：
+识别信号：
 
-> 滑动窗口不断求 max/min。
+> “对每个元素，找左/右第一个更大/更小。”
+
+```mermaid
+flowchart TD
+    X[新元素] --> C{破坏单调性?}
+    C -->|yes| POP[弹栈并结算答案]
+    POP --> C
+    C -->|no| PUSH[入栈]
+```
+
+P0：
+
+- LC 739 Daily Temperatures
+- LC 84 Largest Rectangle in Histogram
+
+## 8.3 Monotonic Queue
+
+P0/P1：
+
+- LC 239 Sliding Window Maximum
+
+它能维护固定窗口最大值，避免每次 O(k) 扫描。
 
 ---
 
 # 9. Binary Tree / BST
 
-树必须非常稳，因为它能同时考递归、DFS、BFS、栈、队列。
+树题最重要的是建立**递归函数定义**。
 
-## P0
+```mermaid
+flowchart TD
+    A[1] --> B[2]
+    A --> C[3]
+    B --> D[4]
+    B --> E[5]
+```
 
-- 94 Binary Tree Inorder Traversal
-- 102 Binary Tree Level Order Traversal
-- 104 Maximum Depth of Binary Tree
-- 226 Invert Binary Tree
-- 543 Diameter of Binary Tree
-- 98 Validate Binary Search Tree
-- 230 Kth Smallest Element in a BST
-- 236 Lowest Common Ancestor of a Binary Tree
-- 105 Construct Binary Tree from Preorder and Inorder
+问最大深度时，不要想“我要遍历整棵树”。先定义：
 
-## P1
+> `depth(node)` = 以 node 为根的子树深度。
 
-- 199 Binary Tree Right Side View
-- 124 Binary Tree Maximum Path Sum
-- 297 Serialize and Deserialize Binary Tree
+然后：
 
-递归三问：
+```python
+def depth(node):
+    if node is None:
+        return 0
+    return 1 + max(depth(node.left), depth(node.right))
+```
 
-1. 当前函数定义是什么？
-2. 子问题返回什么？
-3. 当前节点如何组合子问题？
+### P0
 
-先理解递归，再补 iterative stack 版本。
+- LC 104 Maximum Depth
+- LC 226 Invert Binary Tree
+- LC 102 Level Order Traversal
+- LC 543 Diameter of Binary Tree
+- LC 98 Validate BST
+- LC 230 Kth Smallest in BST
+- LC 236 Lowest Common Ancestor
+- LC 105 Construct Binary Tree from Preorder and Inorder
+
+### BFS 图解
+
+```mermaid
+flowchart LR
+    Q1[queue: 1] --> Q2[queue: 2,3]
+    Q2 --> Q3[queue: 3,4,5]
+```
+
+树层序遍历和图 BFS 本质非常接近。
 
 ---
 
-# 10. Heap / Priority Queue / TopK
+# 10. Heap / TopK
 
-## P0
+堆在 Agent Backend 很实用：
 
-- 215 Kth Largest Element in an Array
-- 347 Top K Frequent Elements
-- 23 Merge K Sorted Lists
+- TopK；
+- priority task；
+- scheduler；
+- streaming median。
 
-## P1
-
-- 295 Find Median from Data Stream
-- 703 Kth Largest in a Stream
-- 621 Task Scheduler
+```mermaid
+flowchart TD
+    A[1 min] --> B[4]
+    A --> C[3]
+    B --> D[8]
+    B --> E[6]
+```
 
 Python `heapq` 默认最小堆。
 
-要能解释：
+### P0
 
-- push/pop O(log n)
-- peek O(1)
-- TopK 为什么常用大小 K 的小顶堆
+- LC 215 Kth Largest Element
+- LC 347 Top K Frequent Elements
+- LC 23 Merge k Sorted Lists
 
-工程迁移：priority job queue、scheduler、top slow requests。
+### P1
+
+- LC 295 Find Median from Data Stream
+
+### 工程迁移
+
+如果只保留最大的 K 个元素：
+
+> 维护大小为 K 的**小顶堆**。
+
+因为堆顶始终是“目前 TopK 中最小的那个”，方便被更大元素替换。
 
 ---
 
 # 11. Binary Search
 
-必须会三类：
+必须会三种：
 
-1. exact search
-2. lower/upper bound
-3. binary search on answer
+1. 找精确值；
+2. lower_bound / upper_bound；
+3. 对答案二分。
 
-## P0
+```mermaid
+flowchart TD
+    L[low] --> M[mid]
+    H[high] --> M
+    M --> Q{答案在左还是右?}
+    Q --> L2[缩左区间]
+    Q --> R2[缩右区间]
+```
 
-- 704 Binary Search
-- 33 Search in Rotated Sorted Array
-- 34 Find First and Last Position
-- 153 Find Minimum in Rotated Sorted Array
+### P0
 
-## P1
+- LC 704 Binary Search
+- LC 33 Search in Rotated Sorted Array
+- LC 34 Find First and Last Position
+- LC 153 Find Minimum in Rotated Sorted Array
 
-- 875 Koko Eating Bananas
-- 1011 Capacity To Ship Packages Within D Days
+### P1
 
-固定一种边界写法，不要临场 `[l,r]` 与 `[l,r)` 混用。
+- LC 875 Koko Eating Bananas
+
+固定一种区间定义，不要 `[l,r]` 和 `[l,r)` 来回换。
 
 ---
 
-# 12. Graph DFS / BFS
+# 12. Graph：DFS / BFS
 
-## P0
+### P0
 
-- 200 Number of Islands
-- 994 Rotting Oranges
-- 133 Clone Graph
-- 207 Course Schedule
+- LC 200 Number of Islands
+- LC 994 Rotting Oranges
+- LC 133 Clone Graph
+- LC 127 Word Ladder（进阶）
 
-## P1
+二维网格只是图的一种表示。
 
-- 127 Word Ladder
-- 417 Pacific Atlantic Water Flow
-- 399 Evaluate Division
+真正要理解：
 
-BFS 天然适合无权最短步数；DFS 常用于连通块/遍历。
+```text
+node
+→ neighbors
+→ visited
+```
+
+BFS 天然适合无权图最短步数。
 
 ---
 
 # 13. Topological Sort
 
-Agent 后端/工作流岗位很值得补。
+它和 Agent Workflow / DAG 的联系非常强。
 
-## P0
+假设任务：
 
-- 207 Course Schedule
-- 210 Course Schedule II
-
-Kahn：
-
-```python
-from collections import deque
-
-
-def topo(n, edges):
-    graph = [[] for _ in range(n)]
-    indegree = [0] * n
-    for a, b in edges:
-        graph[a].append(b)
-        indegree[b] += 1
-
-    q = deque(i for i in range(n) if indegree[i] == 0)
-    order = []
-    while q:
-        x = q.popleft()
-        order.append(x)
-        for y in graph[x]:
-            indegree[y] -= 1
-            if indegree[y] == 0:
-                q.append(y)
-    return order if len(order) == n else []
+```text
+解析文档 → 建索引 → 运行评测 → 生成报告
 ```
 
-工程迁移：workflow DAG、job dependencies。
+有依赖关系。
+
+```mermaid
+flowchart LR
+    PARSE[Parse] --> INDEX[Index]
+    INDEX --> EVAL[Eval]
+    EVAL --> REPORT[Report]
+```
+
+拓扑排序的核心：
+
+1. 统计 indegree；
+2. 把 indegree=0 的节点入队；
+3. 取出后删除它的出边；
+4. 新的 indegree=0 再入队。
+
+### P0
+
+- LC 207 Course Schedule
+- LC 210 Course Schedule II
+
+### 工程迁移
+
+- workflow dependency；
+- task scheduler；
+- build system dependency。
 
 ---
 
 # 14. Union Find
 
-## P1
+适合动态连通问题。
 
-- 547 Number of Provinces
-- 684 Redundant Connection
-- 721 Accounts Merge
+核心：
+
+```text
+find(x)
+union(a, b)
+```
 
 必须理解：
 
-- parent
-- path compression
-- union by size/rank
+- path compression；
+- union by size/rank。
 
-工程迁移：cluster membership、connected components、account merge。
+### P1
+
+- LC 547 Number of Provinces
+- LC 684 Redundant Connection
+- LC 721 Accounts Merge
 
 ---
 
 # 15. Backtracking
 
-## P0
+识别信号：
 
-- 46 Permutations
-- 78 Subsets
-- 39 Combination Sum
-- 22 Generate Parentheses
-- 79 Word Search
+- 所有组合；
+- 所有排列；
+- 所有方案；
+- 选择 → 递归 → 撤销。
 
-## P1
-
-- 51 N-Queens
-- 17 Letter Combinations of a Phone Number
-
-结构：
-
-```text
-选择
-→ 递归
-→ 撤销
+```mermaid
+flowchart TD
+    ROOT[[]] --> A[[1]]
+    ROOT --> B[[2]]
+    A --> A2[[1,2]]
+    A --> A3[[1,3]]
 ```
 
-必须能分清：组合题是否允许重复、是否需要 start index、是否需要去重。
+### P0
+
+- LC 78 Subsets
+- LC 46 Permutations
+- LC 39 Combination Sum
+- LC 22 Generate Parentheses
+- LC 79 Word Search
+
+核心不是背模板，而是定义：
+
+- path 表示什么；
+- choices 是什么；
+- 何时结束；
+- 哪些选择要剪枝。
 
 ---
 
-# 16. Greedy / Interval
+# 16. Greedy
 
-## P0
+### P0
 
-- 55 Jump Game
-- 121 Best Time to Buy and Sell Stock
-- 56 Merge Intervals
-- 763 Partition Labels
-- 435 Non-overlapping Intervals
+- LC 55 Jump Game
+- LC 121 Best Time to Buy and Sell Stock
+- LC 763 Partition Labels
+- LC 56 Merge Intervals
 
-## P1
+贪心必须能解释：
 
-- 45 Jump Game II
-- 452 Minimum Number of Arrows
+> 为什么当前局部选择不会破坏未来最优解？
 
-贪心不能只背代码；要能说明为什么当前局部选择不会破坏未来最优。
+如果完全讲不出理由，只是记住代码，面试很容易被变化题击穿。
 
 ---
 
 # 17. Dynamic Programming
 
-学习顺序：
+DP 最核心的是“状态定义”，不是数组。
 
-```text
-一维
-→ 网格
-→ 背包
-→ 子序列
-→ 状态机
+```mermaid
+flowchart LR
+    STATE[定义 dp[i] 是什么] --> TRANS[状态转移]
+    TRANS --> INIT[初始化]
+    INIT --> ORDER[遍历顺序]
+    ORDER --> OPT[空间优化]
 ```
 
-四问：
+### P0
 
-1. `dp[i]` / `dp[i][j]` 表示什么？
-2. 从哪些状态转移？
-3. base case？
-4. 遍历顺序为什么？
+- LC 70 Climbing Stairs
+- LC 198 House Robber
+- LC 322 Coin Change
+- LC 300 Longest Increasing Subsequence
+- LC 1143 Longest Common Subsequence
+- LC 72 Edit Distance
+- LC 416 Partition Equal Subset Sum
 
-## P0
+### 股票状态机
+
+- LC 121
+- LC 122
+- LC 309
+
+先能写直观二维 DP，再优化空间。
+
+---
+
+# 18. Interval
+
+### P0
+
+- LC 56 Merge Intervals
+- LC 57 Insert Interval
+- LC 435 Non-overlapping Intervals
+
+最常见策略：
+
+> 先按 start 排序，再维护当前合并区间。
+
+---
+
+# 19. Sorting
+
+至少能手写：
+
+- Quick Sort；
+- Merge Sort；
+- Heap Sort 原理。
+
+| 算法 | 平均 | 最坏 | 额外空间 | 稳定 |
+|---|---:|---:|---:|---|
+| Quick Sort | O(n log n) | O(n²) | 递归栈 | 否 |
+| Merge Sort | O(n log n) | O(n log n) | O(n) | 是 |
+| Heap Sort | O(n log n) | O(n log n) | 近似 O(1) 原地 | 否 |
+
+不能只会 `sorted()`。
+
+---
+
+# 20. Trie
+
+适合：
+
+- prefix search；
+- dictionary；
+- route matching。
+
+### P1
+
+- LC 208 Implement Trie
+- LC 211 Design Add and Search Words
+
+---
+
+# 21. LRU：算法和 Backend 的交叉必会题
+
+目标：
+
+```text
+get O(1)
+put O(1)
+```
+
+经典结构：
+
+```mermaid
+flowchart LR
+    MAP[HashMap key->node] -.定位.-> B[B]
+    H[HEAD newest] <--> A[A]
+    A <--> C[C]
+    C <--> B[B]
+    B <--> T[TAIL oldest]
+```
+
+为什么需要 HashMap？
+
+→ O(1) 找节点。
+
+为什么需要 Doubly Linked List？
+
+→ O(1) 从中间删除并移动到头部。
+
+### P0
+
+- LC 146 LRU Cache
+
+不要只会 `OrderedDict` 一行版本。
+
+### 工程迁移
+
+- LLM response cache；
+- embedding cache；
+- session cache。
+
+---
+
+# 22. Hot100 / 高频题清单
+
+## P0：优先做到一周后能独立写
+
+### Array / Hash
+
+- 1 Two Sum
+- 49 Group Anagrams
+- 128 Longest Consecutive Sequence
+- 347 Top K Frequent Elements
+
+### Two Pointers / Window
+
+- 11 Container With Most Water
+- 15 3Sum
+- 42 Trapping Rain Water
+- 3 Longest Substring Without Repeating Characters
+- 438 Find All Anagrams
+- 76 Minimum Window Substring
+
+### Linked List
+
+- 206 Reverse Linked List
+- 21 Merge Two Sorted Lists
+- 141 Linked List Cycle
+- 160 Intersection
+- 19 Remove Nth From End
+- 2 Add Two Numbers
+- 146 LRU Cache
+
+### Tree
+
+- 104 Maximum Depth
+- 226 Invert Tree
+- 102 Level Order
+- 543 Diameter
+- 98 Validate BST
+- 230 Kth Smallest
+- 236 LCA
+- 105 Build Tree
+
+### Stack / Heap / Binary
+
+- 20 Valid Parentheses
+- 155 Min Stack
+- 739 Daily Temperatures
+- 84 Largest Rectangle
+- 215 Kth Largest
+- 23 Merge K Lists
+- 33 Rotated Search
+- 34 First and Last Position
+
+### Graph / Backtracking
+
+- 200 Islands
+- 994 Rotting Oranges
+- 207 Course Schedule
+- 210 Course Schedule II
+- 78 Subsets
+- 46 Permutations
+- 39 Combination Sum
+- 22 Generate Parentheses
+- 79 Word Search
+
+### DP / Greedy / Interval
 
 - 70 Climbing Stairs
 - 198 House Robber
 - 322 Coin Change
-- 300 Longest Increasing Subsequence
-- 1143 Longest Common Subsequence
+- 300 LIS
+- 1143 LCS
 - 72 Edit Distance
-- 62 Unique Paths
-- 64 Minimum Path Sum
+- 55 Jump Game
+- 56 Merge Intervals
 
-## P1
+## P1：补充
 
-- 416 Partition Equal Subset Sum
-- 494 Target Sum
-- 139 Word Break
-- 309 Best Time to Buy and Sell Stock with Cooldown
-- 123 / 188 Stock 系列进阶
-
-先写直观二维状态，再考虑空间压缩。
+- 239 Sliding Window Maximum
+- 295 Median from Data Stream
+- 208 Trie
+- 547 Provinces
+- 684 Redundant Connection
+- 721 Accounts Merge
+- 875 Koko Eating Bananas
+- 57 Insert Interval
+- 435 Non-overlapping Intervals
+- Shortest Path / Dijkstra 基础
+- Bit Manipulation
+- Difference Array
 
 ---
 
-# 18. Trie / LRU / LFU
+# Part B：ACM / 笔试
 
-## Trie
+# 23. 为什么必须练 ACM 输入输出
 
-- 208 Implement Trie
-- 211 Design Add and Search Words
+LeetCode 给你函数：
 
-适用：prefix、dictionary、route matching。
+```python
+def solve(nums): ...
+```
 
-## LRU — P0 必会手写
-
-- 146 LRU Cache
-
-目标：`get/put` O(1)。
-
-经典：
+公司笔试常给：
 
 ```text
-HashMap + Doubly Linked List
+第一行 n
+第二行 n 个整数
 ```
 
-面试中不要只用 `OrderedDict` 一行带过；至少会手写节点和移动逻辑。
+你需要自己解析。
 
-## LFU — P2
-
-- 460 LFU Cache
-
-理解 frequency + recency 即可，不是所有目标岗必做。
-
----
-
-# Part B：Hot100 外高频补充
-
-# 19. Sorting
-
-至少能从空白写：
-
-- Quick Sort
-- Merge Sort
-
-理解：
-
-- Heap Sort
-- stable / unstable
-- in-place
-
-| 算法 | 平均 | 最坏 | 空间 | 稳定 |
-|---|---:|---:|---:|---|
-| Quick Sort | O(n log n) | O(n²) | recursion | 否 |
-| Merge Sort | O(n log n) | O(n log n) | O(n) | 是 |
-| Heap Sort | O(n log n) | O(n log n) | O(1) 级 | 否 |
-
-公司面试仍可能直接让你手写排序，不要因为 Python 有 `sort()` 就跳过。
-
----
-
-# 20. Shortest Path
-
-P1/P2：
-
-- BFS：unweighted
-- Dijkstra：non-negative weighted graph
-- Bellman-Ford：知道适用边界
-
-代表题：
-
-- 743 Network Delay Time
-- 787 Cheapest Flights Within K Stops
-
-Agent Backend 工程中更重要的是理解 scheduler/dependency graph，不要求每个岗位都手写 Floyd。
-
----
-
-# 21. Bit / String / Misc
-
-P1：
-
-- 136 Single Number
-- 191 Number of 1 Bits
-- 338 Counting Bits
-- 31 Next Permutation
-- 54 Spiral Matrix
-- 48 Rotate Image
-
-字符串算法：普通目标岗先掌握 Hash / sliding window / trie；KMP 知道原理和 prefix function 即可，除非公司笔试明显高频。
-
----
-
-# Part C：ACM / 笔试输入输出
-
-# 22. 为什么要练 ACM
-
-LeetCode 帮你处理输入输出，真实笔试常不会。
-
-你至少要熟悉：
+### 常用模板
 
 ```python
 import sys
 
-nums = list(map(int, sys.stdin.readline().split()))
+data = sys.stdin.buffer.read().split()
+nums = list(map(int, data))
 ```
 
-多组数据：
+多组输入、直到 EOF、矩阵输入都要练。
 
-```python
-import sys
+训练原则：
 
-it = iter(sys.stdin.read().strip().split())
-t = int(next(it))
-for _ in range(t):
-    n = int(next(it))
-    arr = [int(next(it)) for _ in range(n)]
-    print(sum(arr))
-```
-
-训练目标：
-
-- 读清多组输入
-- 处理空格/换行
-- 不依赖 IDE 交互
-- 控制复杂度
-- 自己构造边界样例
-
-每周至少做一次 60–90 分钟组合笔试。
+- 不开 Copilot/Codex；
+- 自己处理 I/O；
+- 最后手测空输入、1 个元素、极值。
 
 ---
 
-# Part D：SQL
+# Part C：SQL
 
-# 23. SQL 必会层级
+# 24. SQL 学习顺序
 
-## P0 语法
+```text
+SELECT / WHERE
+→ JOIN
+→ GROUP BY / HAVING
+→ Subquery / CTE
+→ CASE WHEN
+→ Window Function
+→ TopN per group
+→ Index / EXPLAIN
+→ Transaction / MVCC
+```
 
-- SELECT / WHERE
-- ORDER BY / LIMIT
-- INNER JOIN / LEFT JOIN
-- GROUP BY / HAVING
-- CASE WHEN
-- subquery / CTE
+## 24.1 Window Function
 
-## P0 Window Functions
+```sql
+SELECT
+    user_id,
+    amount,
+    ROW_NUMBER() OVER (
+        PARTITION BY user_id
+        ORDER BY amount DESC
+    ) AS rn
+FROM orders;
+```
 
-必须分清：
+必须区分：
 
-- ROW_NUMBER
-- RANK
-- DENSE_RANK
-- SUM/AVG OVER
-- PARTITION BY
+- ROW_NUMBER；
+- RANK；
+- DENSE_RANK。
 
-代表练习：
+## 24.2 Backend 岗还会追问
 
-- 175 Combine Two Tables
-- 181 Employees Earning More Than Managers
-- 182 Duplicate Emails
-- 184 Department Highest Salary
-- 185 Department Top Three Salaries
-- 178 Rank Scores
-- 180 Consecutive Numbers
-
-## P1 Backend 数据库知识
-
-- B+ Tree
-- clustered / secondary index
-- covering index
-- leftmost prefix
-- back-to-table
-- EXPLAIN
-- ACID
-- isolation levels
-- MVCC
-- deadlock
-- slow query
-- pagination
-
-练习时不要只追求 SQL 输出正确；还要问“数据量变大后索引怎么建”。
+- B+ Tree；
+- clustered / secondary index；
+- covering index；
+- back-to-table；
+- leftmost prefix；
+- ACID；
+- isolation level；
+- MVCC；
+- slow SQL；
+- pagination optimization。
 
 ---
 
-# Part E：Backend Coding 手撕
+# Part D：Backend Coding
 
-# 24. 必练组件
+# 25. Sliding Window Rate Limiter
 
-这些不是普通 Hot100，却非常适合 Agent Backend 面试。
+```mermaid
+flowchart LR
+    REQ[request at t] --> DROP[drop timestamps < t-window]
+    DROP --> CNT{count < limit?}
+    CNT -->|yes| ADD[append t, allow]
+    CNT -->|no| BLOCK[reject]
+```
 
-## P0
+单机版可以用 deque。
+
+然后面试官会继续问：
+
+- 多线程安全吗？
+- 多进程怎么办？
+- 多机器怎么办？
+- 为什么 Redis 可以帮忙？
+- fixed window / sliding log / token bucket 区别？
+
+这就是“算法题迁移为工程题”。
+
+---
+
+# 26. Token Bucket
+
+```mermaid
+flowchart LR
+    TIME[时间流逝] --> REFILL[按速率补 token]
+    REQ[请求] --> HAS{token >= cost?}
+    REFILL --> HAS
+    HAS -->|yes| USE[扣 token]
+    HAS -->|no| DENY[限流]
+```
+
+必须解释 burst capacity 和 refill rate。
+
+---
+
+# 27. Retry + Exponential Backoff
+
+```text
+attempt 1: wait 1s
+attempt 2: wait 2s
+attempt 3: wait 4s
+```
+
+真实系统还应考虑 jitter。
+
+面试重点：
+
+- 哪些错误可重试？
+- 401 为什么一般不盲重试？
+- 429 怎么处理？
+- 非幂等写操作重复执行怎么办？
+
+---
+
+# 28. Producer / Consumer
+
+```mermaid
+flowchart LR
+    P1[Producer] --> Q[Queue]
+    P2[Producer] --> Q
+    Q --> C1[Consumer]
+    Q --> C2[Consumer]
+```
+
+要理解：
+
+- bounded queue；
+- blocking；
+- backpressure；
+- duplicate message；
+- retry；
+- idempotency。
+
+---
+
+# 29. Backend 手撕清单
+
+至少训练：
 
 1. LRU Cache
 2. thread-safe queue
 3. producer-consumer
-4. sliding-window rate limiter
+4. sliding-window limiter
 5. token bucket
-6. retry with exponential backoff + jitter
+6. retry with backoff
 7. timeout wrapper
 8. TTL cache
-9. concurrency semaphore
-10. idempotent request handler
+9. simple scheduler
+10. simple message queue
 11. SSE endpoint
-12. simple task state machine
+12. semaphore concurrency limit
+13. idempotent request handler
+14. connection pool 思路
+15. distributed lock 思路
 
-## P1
+---
 
-13. connection pool 思路
-14. distributed lock 思路
-15. simple delayed/retry queue
-16. task scheduler / priority queue
-17. circuit breaker
-18. cache-aside
+# Part E：CS 基础
 
-## 24.1 Sliding-window limiter
+# 30. Redis
 
-```python
-from collections import deque
-from time import monotonic
+必须会：
 
+- String/List/Hash/Set/ZSet；
+- expiration；
+- eviction；
+- persistence；
+- cache penetration/breakdown/avalanche；
+- hot key / big key；
+- distributed lock；
+- Redis/MySQL consistency。
 
-class SlidingWindowLimiter:
-    def __init__(self, limit: int, window_seconds: float):
-        self.limit = limit
-        self.window = window_seconds
-        self.events = deque()
+# 31. Network
 
-    def allow(self) -> bool:
-        now = monotonic()
-        cutoff = now - self.window
-        while self.events and self.events[0] <= cutoff:
-            self.events.popleft()
-        if len(self.events) >= self.limit:
-            return False
-        self.events.append(now)
-        return True
+必须会：
+
+- TCP vs UDP；
+- three-way handshake；
+- four-way close；
+- HTTP / HTTPS；
+- keep-alive；
+- SSE vs WebSocket；
+- reverse proxy / gateway；
+- 502 vs 504。
+
+# 32. OS / Concurrency
+
+必须会：
+
+- process vs thread；
+- context switch；
+- mutex / deadlock；
+- thread pool；
+- I/O multiplexing；
+- Python GIL；
+- async vs thread vs process；
+- producer-consumer。
+
+# 33. MQ / Distributed Basics
+
+至少理解：
+
+- why MQ；
+- producer retry；
+- consumer retry；
+- duplicate；
+- idempotency；
+- ordering；
+- message loss；
+- delayed/retry queue；
+- eventual consistency。
+
+---
+
+# Part F：AI Coding
+
+# 34. FastAPI LLM Endpoint
+
+30–60 分钟内应该能做：
+
+- Pydantic request/response；
+- API key 从环境读取；
+- timeout；
+- error mapping；
+- structured response。
+
+不要把 key 写死在代码。
+
+# 35. SSE
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant A as API
+    participant M as Model/Agent
+    C->>A: request
+    A->>M: run
+    M-->>A: event 1
+    A-->>C: SSE event 1
+    M-->>A: event 2
+    A-->>C: SSE event 2
+    M-->>A: final
+    A-->>C: final event
 ```
 
-然后继续追问：
+必须解释：
 
-- thread safe 吗？
-- multi-process 呢？
-- distributed 呢？
-- 为什么生产环境可能放 Redis？
-- fixed/sliding/token bucket 如何选择？
+- content type；
+- client disconnect；
+- cancellation；
+- error event；
+- SSE vs WebSocket。
 
-## 24.2 Retry
+# 36. Tool Calling Loop
 
-必须讲清：
+目标：从空白写一个最小安全版：
 
-- retryable vs non-retryable
-- 401 通常不盲重试
-- 429/5xx
-- exponential backoff
-- jitter
-- retry budget
-- idempotency
+```mermaid
+flowchart TD
+    Q[Question] --> D[Model decision]
+    D -->|final| F[Answer]
+    D -->|tool| REG[Registry]
+    REG --> VAL[Validate args]
+    VAL --> EXEC[Execute with timeout]
+    EXEC --> OBS[Observation]
+    OBS --> D
+```
 
-## 24.3 Task state machine
+必须包括：
 
-至少能设计：
+- allowlisted tool；
+- schema validation；
+- timeout；
+- error taxonomy；
+- max steps。
+
+这和当前项目 `src/rag_agent/agent/tooling.py` 完全对应，可以把项目当练习答案，但第一次请先自己写。
+
+# 37. Simple RAG
+
+30–60 分钟版本只要求理解流程：
 
 ```text
-queued
-→ running
-→ succeeded
-→ failed
-→ retrying
-→ cancelled
+chunk
+→ retrieve top-k
+→ context
+→ prompt
+→ answer
+→ citation/refusal
 ```
 
-这直接连接本项目未来 durable task Roadmap。
+不要求现场重写 Qdrant。
 
----
+# 38. Conversation State
 
-# Part F：CS 基础
+至少设计：
 
-# 25. Network
+- thread_id；
+- message history；
+- request isolation；
+- concurrent requests；
+- checkpoint 与 long-term memory 区别。
 
-必须能讲：
+# 39. Agent Reliability
 
-- TCP vs UDP
-- three-way handshake
-- four-way close
-- TCP reliability
-- HTTP/1.1 vs HTTP/2 基础
-- HTTPS/TLS 基础
-- keep-alive
-- REST
-- SSE vs WebSocket
-- reverse proxy / gateway
-- 401/403/429/500/502/503/504
-- timeout 分层
+故意让 Tool 返回：
 
-Agent 场景迁移：LLM streaming、tool timeout、gateway、client disconnect。
+- timeout；
+- invalid JSON；
+- 429；
+- 500；
+- empty result。
 
----
+你的系统应该分类，不要统一：
 
-# 26. OS / Concurrency
+```text
+Agent failed
+```
 
-必须能讲：
+# 40. Agent Eval
 
-- process vs thread
-- context switch
-- lock / race / deadlock
-- thread pool
-- producer-consumer
-- IO multiplexing
-- sync vs async
-- Python GIL
-- async vs thread vs process
-- cancellation
-- backpressure 基础
+设计固定任务集：
 
-不要说“async 更快”；要说它适合 I/O wait 并提高并发利用率。
+```text
+expected tool
+expected arguments
+should answer / abstain
+expected source
+```
 
----
+至少记录：
 
-# 27. Redis
-
-必须会：
-
-- String / Hash / List / Set / ZSet
-- expiration
-- eviction
-- persistence
-- cache penetration
-- cache breakdown
-- cache avalanche
-- hot key / big key
-- distributed lock 基础
-- Redis/MySQL consistency
-
-结合 Agent：session/cache/rate-limit/ephemeral state。
-
----
-
-# 28. MQ / Distributed Basics
-
-必须会：
-
-- why queue
-- producer retry
-- consumer retry
-- duplicate delivery
-- idempotency
-- ordering
-- message loss
-- dead/retry queue
-- eventual consistency
-- worker lease/heartbeat 基础
-
-结合 Agent：long-running task、tool workflow、background execution。
+- task success；
+- tool success；
+- wrong tool；
+- invalid arguments；
+- timeout；
+- latency。
 
 ---
 
 # Part G：System Design
 
-# 29. 必会设计题：企业 Agent Backend
+# 41. 设计一个企业 Agent Backend
 
 题目：
 
-> 设计一个支持 RAG、工具调用、流式输出、长任务和失败恢复的企业 Agent 服务。
+> “设计一个支持 RAG、工具调用、长任务、流式输出、失败恢复和高风险操作审批的 Agent 服务。”
 
-建议层次：
+你可以按下面层次讲：
 
-1. API / Gateway：auth、rate limit、request ID
-2. Session / State：conversation、checkpoint
-3. Orchestrator：workflow / agent loop
-4. Tool Layer：registry、schema、permission、timeout
-5. RAG：retrieve、rerank、context、citation
-6. Model Layer：routing、fallback
-7. Async Jobs：queue、worker、durable state
-8. Storage：Postgres / Redis / vector store
-9. Safety：permission、sandbox、HITL
-10. Observability：trace、logs、metrics、token/cost
-11. Eval：offline regression、online feedback
-
-追问必须准备：
-
-- 服务重启怎么办？
-- 工具执行一半崩了怎么办？
-- duplicate request 怎么办？
-- 用户断开 SSE 怎么办？
-- 哪些状态放 Redis、哪些放 Postgres？
-- 多租户怎么隔离？
-- tool 权限怎么控制？
-- 如何判断 Agent 版本真的更好？
-
-面试官更看重 failure mode 和 trade-off，不是你画了多少微服务方框。
-
----
-
-# Part H：AI Coding
-
-# 30. 30–60 分钟必须能写的小任务
-
-## Task 1：FastAPI LLM endpoint
-
-要求：
-
-- Pydantic request/response
-- input validation
-- timeout
-- exception mapping
-- secret 不回传
-
-## Task 2：SSE stream
-
-要求：
-
-- correct content type
-- client disconnect
-- cancellation
-- error event
-
-## Task 3：Tool Calling loop
-
-要求：
-
-- tool schema
-- registry
-- argument validation
-- dispatch
-- timeout
-- error taxonomy
-- observation
-- max steps
-- final answer
-
-本项目对应：
-
-- `src/rag_agent/agent/tooling.py`
-- `scripts/tool_agent.py`
-- `tests/test_tooling.py`
-
-## Task 4：Simple RAG
-
-要求：
-
-```text
-chunk
-→ retrieve
-→ top-k
-→ context
-→ generation
-→ citation
-→ no-evidence refusal
+```mermaid
+flowchart TD
+    C[Client] --> GW[API Gateway / Auth / Rate Limit]
+    GW --> ORCH[Agent Orchestrator]
+    ORCH --> RAG[RAG]
+    ORCH --> TOOL[Tool Runtime]
+    ORCH --> STATE[(State / Checkpoint)]
+    ORCH --> Q[Durable Queue]
+    Q --> W[Workers]
+    TOOL --> PERM[Permission / HITL]
+    ORCH --> OBS[Trace / Metrics / Eval]
+    RAG --> V[(Vector DB)]
+    RAG --> SQL[(Postgres / Search Store)]
+    STATE --> SQL
+    W --> SQL
 ```
 
-## Task 5：Conversation / Agent State
+面试官关心的不是你能画多少框，而是：
 
-要求：
-
-- thread/session ID
-- message state
-- checkpoint
-- concurrent request conflict
-- short-term state vs long-term memory
-
-## Task 6：Reliability
-
-故意制造：
-
-- timeout
-- invalid JSON
-- unknown tool
-- 429
-- 500
-- empty result
-
-系统必须分类，不能全叫“模型错误”。
-
-## Task 7：Agent Eval
-
-固定一批任务，记录：
-
-- task success
-- correct tool
-- valid arguments
-- tool success
-- recovery
-- step count
-- latency
-- token/cost
+- 为什么需要 queue？
+- 哪些状态必须持久化？
+- 如何避免重复执行写 Tool？
+- 如何取消长任务？
+- 用户断开后任务怎么办？
+- tool timeout 怎么处理？
+- 高风险 action 谁审批？
+- 怎么观测一次失败？
 
 ---
 
-# Part I：项目深挖
+# Part H：和本项目联动
 
-# 31. 这个仓库就是面试训练场
+# 42. 每学一个主题，都去仓库找对应代码
 
-- `src/rag_agent/retrieval/fusion.py`：排名/融合
-- `src/rag_agent/retrieval/hybrid.py`：Hash、集合、TopK、多路结果
-- `src/rag_agent/agent/graph.py`：state machine、bounded loop
-- `src/rag_agent/agent/tooling.py`：registry、validation、failure taxonomy
-- `src/rag_agent/api/main.py`：FastAPI/SSE/request lifecycle
-- `src/rag_agent/api/jobs.py`：为什么内存 JobRegistry 不是 durable queue
-- `src/rag_agent/retrieval/sqlite_store.py`：SQL/索引
-- `tests/`：边界条件和 regression
+| 面试主题 | 项目对应 |
+|---|---|
+| Ranking / fusion | `src/rag_agent/retrieval/fusion.py` |
+| dict/set/TopK | `retrieval/hybrid.py` |
+| state machine | `agent/graph.py` |
+| Tool Registry / timeout | `agent/tooling.py` |
+| FastAPI / SSE | `api/main.py` |
+| task state | `api/jobs.py` |
+| SQL / FTS | `retrieval/sqlite_store.py` |
+| tests / boundary | `tests/` |
 
-每学一个主题都问：
+练习原则：
 
-> 这个项目里有真实实现吗？代码在哪？如果没有，应该实现还是只需要学习？
+> 先自己写简化版，再看项目实现。
 
----
-
-# 32. 高频项目追问
-
-必须能回答：
-
-- 为什么 dense + sparse？
-- RRF 为什么不直接加原分数？
-- reranker 提升什么、增加什么成本？
-- evidence gate 怎么失败？
-- citation validation 能保证事实真实吗？
-- 为什么要拒答？
-- checkpoint 与 long-term memory 区别？
-- MCP 与 Tool Calling 区别？
-- Tool Registry 为什么需要？
-- unknown tool 为什么绝不能直接执行？
-- retry 哪些错误能做？
-- 为什么现在的 JobRegistry 不能叫 durable execution？
-- Agent Eval 和普通 unit test 有什么区别？
-- 为什么不是上来就 Multi-Agent？
+不要一开始照抄项目代码，否则很容易产生“看懂 = 会写”的错觉。
 
 ---
 
-# Part J：完整训练计划
-
-# 33. 12 周路线
-
-每周根据课程/申请安排可压缩，但顺序不要乱。
+# 43. 12 周训练计划
 
 ## Week 1
 
 Array/Hash + Two Pointers
 
-目标：10–12 题，P0 能复写。
+目标：Two Sum、3Sum、Longest Consecutive 达到 D。
 
 ## Week 2
 
-Sliding Window + Prefix Sum + Linked List
+Sliding Window + Prefix Sum
 
-额外：手写 sliding-window limiter。
+附加：手写单机 rate limiter。
 
 ## Week 3
 
-Stack/Queue + Tree
+Linked List + Stack
 
-额外：BFS/DFS 口述。
+附加：手写 LRU 第一版。
 
 ## Week 4
 
-Heap + Binary Search
+Tree / BST
 
-额外：TopK 工程场景。
+附加：递归与 BFS 都能从空白写。
 
 ## Week 5
 
-Graph + Topo + Union Find
+Heap + Binary Search
 
-额外：设计简单 workflow DAG。
+附加：TopK + priority queue 设计。
 
 ## Week 6
 
-Backtracking + Greedy + Interval
+Graph / Topological / Union Find
 
-开始 45 分钟双题限时。
+附加：把 workflow DAG 画成拓扑依赖。
 
 ## Week 7
 
-DP
+Backtracking + Greedy + Interval
 
-不要追难题，先把状态定义写清楚。
+目标：组合/排列/区间能识别模式。
 
 ## Week 8
 
-Trie + LRU + Sorting + ACM I/O
+DP
 
-LRU 必须空白手写。
+目标：Coin Change、LIS、LCS、Edit Distance。
 
 ## Week 9
 
-SQL + MySQL/Redis
+SQL + Redis + Database
 
-窗口函数、索引、事务。
+至少做：Join、Window、TopN、索引追问。
 
 ## Week 10
 
-Network + OS + concurrency + MQ
+Backend Coding
 
-手写 queue/retry/timeout。
+Limiter、Retry、Queue、TTL Cache、SSE。
 
 ## Week 11
 
-FastAPI + SSE + Tool Calling + Simple RAG
+AI Coding
 
-做 2 次 60 分钟 AI Coding 模拟。
+FastAPI + Tool Loop + Simple RAG + State。
 
 ## Week 12
 
-System Design + 项目深挖 + 综合模拟
+System Design + 模拟面试
 
-一场模拟至少包含：
+60–90 分钟闭卷：
 
-- 1 算法题
-- 1 SQL/Backend 问题
-- 1 Agent/RAG 项目追问
-- 1 System Design
+- 1 道算法；
+- 1 道 SQL；
+- 1 个 backend component；
+- 1 个 Agent system design。
 
 ---
 
-# 34. 日常最小训练法
+# 44. 每周复习法
 
-如果每天只有 60–90 分钟：
+同一道题：
 
 ```text
-20 min：复写旧题
-30 min：新题/变化题
-20 min：Backend/SQL/CS
-10 min：口述项目一个模块
+Day 0 学会
+Day 1 复写
+Day 3 复写
+Day 7 复写
+Day 14 再测
 ```
 
-如果当天完全没时间：只复写 1 个 P0 模板，也比连续一周断掉好。
+如果 Day 7 写不出，状态从 D 降回 C/B。
+
+不要维护“已刷 200 题”这种虚假安全感。
 
 ---
 
-# 35. 周末检查
+# 45. 最低面试标准
 
-每周随机抽：
+## 算法
 
-- 2 道本周 P0
-- 1 道上两周旧题
-- 1 个 Backend component
-- 1 组 SQL
-- 1 个 Agent 项目问题
-
-全部不看答案。
-
-如果旧题写不出，把状态从 D/C 降回 B，不自欺欺人。
-
----
-
-# 36. 公司笔试/面试证据如何反向更新题单
-
-根目录 `AGENTS.md` 要求每次接手都重新扫招聘市场。
-
-算法文档也遵循同样规则：
-
-```text
-新面经/笔试证据
-→ 记录题型
-→ 判断是否多家公司重复
-→ 提升/降低 P0/P1
-→ 不因单个极端难题无限扩张题库
-```
-
-当前 2026 Agent/后端面经反复出现的方向包括：
-
-- sliding window
-- LRU
-- tree / graph / topo
-- sorting
-- DP
-- Redis / DB
-- concurrency
-- SSE / MCP / Agent
-- rate limiter / cache / queue 这类工程手撕
-
-因此 Hot100 保留主干，同时加入 Backend Coding 才符合目标岗位。
-
----
-
-# 37. 最低面试完成标准
-
-## Algorithms
-
-- P0 模式大部分达到 D。
-- 中等题能在 20–30 分钟给出可运行方案。
-- 能处理边界和复杂度。
+- Hot100 P0 主模式稳定；
+- 大部分中等题能独立完成；
+- 会复杂度与边界分析。
 
 ## SQL
 
-- Join / Group / Window / TopN 能现场写。
-- 索引/事务/MVCC 能解释。
+- Join / Group / Window / TopN 能现场写；
+- B+ Tree / index / transaction 能解释。
 
 ## Backend
 
-- LRU / limiter / retry / timeout / queue 至少 4 个能手写或完整设计。
-- Redis/MySQL/MQ/HTTP/SSE/concurrency 不只会名词。
+- Redis / DB / HTTP / SSE / concurrency / MQ 能解释；
+- LRU / limiter / retry / queue 至少数个能现场写。
 
 ## AI Coding
 
-能独立做：
-
-```text
-FastAPI
-+ Tool/RAG
-+ validation
-+ timeout/error
-+ state
-```
-
-的最小程序。
-
-## Project
-
-能从：
-
-```text
-problem
-→ architecture
-→ code path
-→ failure
-→ test
-→ metric
-→ trade-off
-→ roadmap
-```
-
-完整讲下来。
+- FastAPI + Tool Calling/RAG + timeout/state 能做最小版本。
 
 ## System Design
 
-能设计 Agent service，并说明为什么当前项目没有必要把所有东西都做成 Kubernetes 分布式平台。
+- 能设计 Agent 服务的 API、state、tool、RAG、queue、storage、security、observability、eval。
+
+## 项目
+
+- 能从业务问题讲到代码、失败、指标、trade-off；
+- 不只背 README。
 
 ---
 
-# 38. 你不需要为了“全面”刷什么
+# 46. 最后自测
 
-对 Agent Backend / AI Application 初级岗位，暂时不用把主要时间投入：
+不看文档回答：
 
-- 竞赛级数学
-- 极难网络流
-- 冷门高级字符串算法大全
-- 复杂计算几何
-- 大量 Hard 题打卡
+1. 为什么滑动窗口可以迁移到 rate limiting？
+2. 为什么 LRU 需要 HashMap + Doubly Linked List？
+3. TopK 为什么常用大小 K 的小顶堆？
+4. 拓扑排序为什么适合任务依赖？
+5. BFS 为什么适合无权最短路？
+6. Prefix Sum 为什么能把区间和查询降到 O(1)？
+7. DP 的状态定义为什么比公式更重要？
+8. 一个 retry 为什么必须考虑 idempotency？
+9. SSE 和 WebSocket 有什么区别？
+10. 一个 Agent Tool Loop 至少需要哪些安全边界？
+11. 如果 Tool timeout，系统为什么不能只返回一个模糊的 500？
+12. 设计 durable task 时为什么需要 persistent state + worker + retry/lease？
 
-除非目标公司的笔试证据明确要求。
-
-更高收益的是：
-
-> **稳定写出常见 Medium + 后端基础 + Agent 项目 + AI Coding。**
-
----
-
-# 39. 最后记住
-
-Hot100 不是目的。
-
-真正目标是让你看到一个新问题时能判断：
-
-- 这是 Hash 还是 window？
-- 这是 BFS 还是 topo？
-- 这是算法问题还是系统状态问题？
-- timeout 后能不能 retry？
-- 是否需要幂等？
-- state 应该放哪里？
-- Agent 失败如何测？
-
-当算法、后端和 Agent 能用同一套问题拆解方式解释时，这份训练才真正完成。
+如果只能背答案，回到对应章节并从空白写代码。
