@@ -2,18 +2,18 @@
 
 一个面向 **Agent Backend / AI Application Engineering** 学习与求职展示的工程项目。
 
-它从企业知识库 RAG 出发，已经包含 Hybrid Retrieval、RRF、reranker、证据门控、引用校验、
-LangGraph 有界工作流、FastAPI/SSE、MCP、离线评测和基础安全边界；同时新增了一个独立的
-**bounded Tool Agent runtime**，用于学习和验证 Tool Registry、参数 Schema、超时、失败分类与执行 trace。
+它从企业知识库 RAG 出发，已经包含 Hybrid Retrieval、RRF、reranker、证据门控、引用校验、LangGraph 有界工作流、FastAPI/SSE、MCP、离线评测和基础安全边界；同时有一个独立的 **bounded Tool Agent runtime**，用于学习和验证 Tool Registry、参数 Schema、超时、失败分类与执行 trace。
 
 > 项目目标不是把所有热门框架堆在一起，而是把“能运行、能测试、能解释、能评测”的 AI 应用后端逐步做完整。
 
 ## 先看这四份文档
 
-- **从 0 学项目**：[docs/LEARNING_GUIDE.md](docs/LEARNING_GUIDE.md)
+- **从 0 学项目（图解课程）**：[docs/LEARNING_GUIDE.md](docs/LEARNING_GUIDE.md)
 - **企业到底招什么**：[docs/JOB_SKILLS.md](docs/JOB_SKILLS.md)
-- **算法 / 笔试 / 手撕 / SQL / AI Coding**：[docs/INTERVIEW_ALGORITHMS.md](docs/INTERVIEW_ALGORITHMS.md)
+- **算法 / 笔试 / 手撕 / SQL / AI Coding（图解训练）**：[docs/INTERVIEW_ALGORITHMS.md](docs/INTERVIEW_ALGORITHMS.md)
 - **下一步怎么升级**：[docs/ROADMAP.md](docs/ROADMAP.md)
+
+主教材使用公开虚构案例 [data/tutorial/expense_policy.md](data/tutorial/expense_policy.md) 贯穿文档入库、Hybrid RAG、LangGraph、Tool Agent、State/Checkpoint/Memory、Reliability、Security 和 Eval。大量流程图直接用 GitHub 原生 Mermaid 渲染，因此图和代码一起版本化。
 
 工程实现和评测细节：
 
@@ -53,7 +53,7 @@ LangGraph 有界工作流、FastAPI/SSE、MCP、离线评测和基础安全边�
 
 ### Tool Agent runtime
 
-新增：
+代码：
 
 - `src/rag_agent/agent/tooling.py`
 - `scripts/tool_agent.py`
@@ -76,8 +76,7 @@ LangGraph 有界工作流、FastAPI/SSE、MCP、离线评测和基础安全边�
 .\.venv\Scripts\python scripts/tool_agent.py "知识库里的超时策略是什么？" --json
 ```
 
-这是一条**独立可运行的教学/工程链路**，还没有替换现有稳定 RAG 主图。
-因此不能把项目描述成“已经完成通用生产 Agent Runtime”。
+这是一条**独立可运行的教学/工程链路**，还没有替换现有稳定 RAG 主图。因此不能把项目描述成“已经完成通用生产 Agent Runtime”。
 
 ## 当前没有实现什么
 
@@ -104,9 +103,8 @@ LangGraph 有界工作流、FastAPI/SSE、MCP、离线评测和基础安全边�
 
 ## 为什么这个项目不只叫 RAG Demo
 
-项目当前已经同时涉及：
-
 **AI Application**
+
 - RAG
 - LLM structured output
 - context engineering
@@ -115,6 +113,7 @@ LangGraph 有界工作流、FastAPI/SSE、MCP、离线评测和基础安全边�
 - Tool Agent runtime
 
 **Backend**
+
 - FastAPI
 - SSE
 - SQLite
@@ -126,6 +125,7 @@ LangGraph 有界工作流、FastAPI/SSE、MCP、离线评测和基础安全边�
 - CI / tests
 
 **Agent Engineering**
+
 - bounded workflow
 - state/checkpoint
 - tool registry
@@ -135,6 +135,7 @@ LangGraph 有界工作流、FastAPI/SSE、MCP、离线评测和基础安全边�
 - explicit step limit
 
 **Evaluation**
+
 - unit tests
 - retrieval metrics
 - gate failure metrics
@@ -236,13 +237,7 @@ CI 的代码覆盖率门槛不等于 RAG/Agent 效果。
 
 不适合作为“纯大模型训练 / 后训练算法”项目包装。
 
-招聘技能来源、公司样本和项目差距见：
-
-[docs/JOB_SKILLS.md](docs/JOB_SKILLS.md)
-
-算法和 Coding 面试路线见：
-
-[docs/INTERVIEW_ALGORITHMS.md](docs/INTERVIEW_ALGORITHMS.md)
+招聘技能来源、公司样本和项目差距见 [docs/JOB_SKILLS.md](docs/JOB_SKILLS.md)。算法和 Coding 面试路线见 [docs/INTERVIEW_ALGORITHMS.md](docs/INTERVIEW_ALGORITHMS.md)。
 
 ## 项目原则
 
@@ -255,7 +250,7 @@ CI 的代码覆盖率门槛不等于 RAG/Agent 效果。
 → 实现
 → 自动测试
 → 效果评测
-→ 文档
+→ 图解/学习文档
 → 面试表达
 ```
 
@@ -266,6 +261,8 @@ CI 的代码覆盖率门槛不等于 RAG/Agent 效果。
 → 装一个库
 → README 写“已掌握”
 ```
+
+根目录 [AGENTS.md](AGENTS.md) 是 Codex/Agent 的接手协议：实质升级前先刷新招聘市场，并保持图解课程和项目真实状态同步。
 
 ## License
 
