@@ -12,34 +12,35 @@
 
 **[LEARNING_GUIDE.md](LEARNING_GUIDE.md)**
 
-这是唯一主要学习入口。
+这是唯一主要学习入口，目前为第二版“图解课程版”。
 
 适合：
 
-- 会基础 Python
-- 没系统学过 RAG / Agent
-- 后端知识不完整
-- 想知道每个模块为什么存在
-- 想把项目真正讲清楚
+- 会基础 Python；
+- 没系统学过 RAG / Agent；
+- 后端知识不完整；
+- 想知道每个模块为什么存在；
+- 想把项目真正讲清楚。
 
-学习方式：
+主教材现在统一采用：
 
 ```text
-问题
-→ 直觉
+为什么需要
+→ 图解
+→ 直觉例子
 → 原理
-→ 例子
 → 项目真实代码
 → 跟做
-→ 观察结果
-→ 修改实验
-→ Trade-off
+→ 预期结果
+→ 故意制造失败
+→ 解释失败
+→ 自己修改
 → 面试表达
 ```
 
-原则：**先教，再练，再复习。**
+并使用 `data/tutorial/expense_policy.md` 作为贯穿案例，从文档入库一路讲到 Hybrid RAG、LangGraph、Tool Agent、State/Checkpoint/Memory、Reliability、Security、Eval 与 Backend。
 
-主教材负责知识与项目理解；其中若出现历史招聘描述，应以最新 `JOB_SKILLS.md` 的市场扫描覆盖它，不要把历史样本当永久结论。
+原则：**先教，再练，再复习；能跑不等于会，能改和能解释才接近掌握。**
 
 ### 2. 招聘技能地图
 
@@ -61,7 +62,7 @@
 
 **[INTERVIEW_ALGORITHMS.md](INTERVIEW_ALGORITHMS.md)**
 
-第二版已经不是简单题目列表。
+目前为第三版“图解训练版”。
 
 完整目标：
 
@@ -77,25 +78,21 @@ Hot100 主模式
 + AI Coding
 ```
 
-文档包含明确题号/P0/P1、12 周学习路线、工程迁移和掌握标准。
+它不再只是题号列表，而是把模式识别、Mermaid 图解、代码模板、工程迁移和面试变化题连起来。例如：
+
+- Sliding Window → Rate Limiter
+- Heap → TopK / Priority Task
+- Topological Sort → Workflow DAG
+- LRU → Cache
+- Queue → Worker / Backpressure
+
+并给出 P0/P1 题单、12 周训练计划和一周后复写的掌握标准。
 
 ### 4. 工程参考
 
 **[ENGINEERING_REFERENCE.md](ENGINEERING_REFERENCE.md)**
 
-需要查：
-
-- 代码结构
-- 数据流
-- SQLite/Qdrant 一致性
-- API/SSE
-- 安全边界
-- MCP
-- Tool runtime
-- Docker/CI
-- 当前工程限制
-
-时再打开。
+需要查代码结构、数据流、SQLite/Qdrant 一致性、API/SSE、安全边界、MCP、Tool runtime、Docker/CI 和当前工程限制时再打开。
 
 ### 5. 评测
 
@@ -103,12 +100,12 @@ Hot100 主模式
 
 包含：
 
-- 单元测试和效果评测区别
-- retrieval metrics
-- gate metrics
-- Agent/tool runtime 应该怎么评
-- 当前实验真实能证明什么
-- 下一步完整消融怎么做
+- 单元测试和效果评测区别；
+- retrieval metrics；
+- gate metrics；
+- Agent/tool runtime 应该怎么评；
+- 当前实验真实能证明什么；
+- 下一步完整消融怎么做。
 
 ### 6. Roadmap
 
@@ -142,12 +139,12 @@ Hot100 主模式
 
 整个仓库统一使用：
 
-- **已讲解**：文档有内容
-- **有 Demo**：存在最小可运行示例
-- **已实现**：已进入项目代码
-- **有测试**：存在自动测试
-- **有效果证据**：有可重复实验
-- **未实现**：只有知识/招聘记录/Roadmap
+- **已讲解**：文档有内容；
+- **有 Demo**：存在最小可运行示例；
+- **已实现**：已进入项目代码；
+- **有测试**：存在自动测试；
+- **有效果证据**：有可重复实验；
+- **未实现**：只有知识/招聘记录/Roadmap。
 
 这些词不能互相替代。
 
@@ -173,9 +170,7 @@ Hot100 主模式
 
 旧版本有大量并列 Markdown：architecture、design、context engineering、tuning、security、evaluation、evaluation lab、interview、resume guide、learning path、hiring alignment、technology radar、experiment notes、code walkthrough。
 
-它们很多内容重复，而且学习者很难判断先读谁。
-
-现在按：
+现在收拢成：
 
 ```text
 学习
@@ -186,9 +181,7 @@ Hot100 主模式
 路线图
 ```
 
-六个职责收拢。
-
-Git 历史仍保留旧文件，所以需要追溯时可以从提交记录恢复，但它们不再作为日常入口。
+六个职责。Git 历史仍保留旧文件，需要追溯时可以从提交记录恢复，但它们不再作为日常入口。
 
 ---
 
@@ -204,5 +197,6 @@ Git 历史仍保留旧文件，所以需要追溯时可以从提交记录恢复�
 6. 是否有测试？
 7. 是否有实验数据？
 8. 是否会造成 README、主教材、招聘地图与真实代码状态不一致？
+9. 新概念是否优先用图解 + 同一案例 + 实验，而不是只增加说明文字？
 
 默认不要新增新的顶层 docs Markdown。
