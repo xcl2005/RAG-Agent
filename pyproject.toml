@@ -89,6 +89,9 @@ fail_under = 75
 target-version = "py310"
 line-length = 110
 src = ["src", "tests", "scripts"]
+# Long-form learning guides contain deliberately compact Python snippets. Keep
+# production/test Python strict without letting the formatter rewrite teaching prose.
+extend-exclude = ["docs/*.md"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]

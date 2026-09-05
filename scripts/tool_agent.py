@@ -48,10 +48,7 @@ def main() -> int:
         else:
             print(f"Agent failed: {result.failure_kind}")
         for step in result.steps:
-            print(
-                f"- step {step['step']}: {step['tool_name']} -> "
-                f"{step['status']} ({step['latency_ms']} ms)"
-            )
+            print(f"- step {step['step']}: {step['tool_name']} -> {step['status']} ({step['latency_ms']} ms)")
     return 0 if result.failure_kind is None else 1
 
 
