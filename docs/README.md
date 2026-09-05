@@ -1,92 +1,182 @@
-# 文档导航
+# Documentation
 
-> 当前状态：文档体系重构第 1 阶段。旧文档暂时保留，避免在迁移完成前丢失独有内容。后续会把重复内容迁入下列核心文档，再删除过时文件。
+这个目录只保留少量长期维护的核心文档。
 
-这个目录以后只保留少量、职责明确的核心入口。**文档数量要少，但教材本身可以很长。**
+如果你第一次打开项目，不要从文件列表随机读。
 
-## 先看哪一份
+## 阅读顺序
 
-如果你的目标是从零理解项目并能够自己修改、解释和面试，当前先读：
+### 1. 主教材
 
-1. [`PROJECT_HANDBOOK.md`](PROJECT_HANDBOOK.md) —— 当前主教材。已经覆盖项目原理、真实代码、跟做、评测和求职表达；后续会继续扩写并最终迁移/重命名为长期 `LEARNING_GUIDE`。
-2. [`INTERVIEW_ALGORITHMS.md`](INTERVIEW_ALGORITHMS.md) —— 算法、SQL、Backend Coding 与 AI Coding 学习路线。Hot 100 是主干，不是全部。
-3. [`JOB_SKILLS.md`](JOB_SKILLS.md) —— Agent Backend / AI Application / LLM Engineering 等岗位的招聘技能矩阵和项目差距。
+**[LEARNING_GUIDE.md](LEARNING_GUIDE.md)**
 
-如果你只是开发或排错，再按需查参考文档，不需要从头读完所有旧 Markdown。
+这是唯一主要学习入口。
 
-## 目标文档结构
+适合：
 
-| 文档 | 长期职责 | 当前状态 |
-|---|---|---|
-| `PROJECT_HANDBOOK.md` / 未来 `LEARNING_GUIDE.md` | 从 0 开始的主教材：RAG → Agent → Backend → Evaluation → Deployment | 已存在，继续大幅扩写 |
-| `JOB_SKILLS.md` | 招聘样本、技能频率、项目映射、缺口与优先级 | 已建立第一版 |
-| `INTERVIEW_ALGORITHMS.md` | Hot100 + 高频补充 + SQL + Backend/AI Coding + System Design | 已建立第一版 |
-| `ENGINEERING_REFERENCE.md` | 架构、关键模块、配置、运行时与故障排查 | 待由旧文档合并 |
-| `EVALUATION.md` | 检索/生成/Agent 评测、实验设计、指标和结果边界 | 待由旧评测文档合并 |
-| `ROADMAP.md` | 已实现 / 部分实现 / 未实现，按招聘价值与工程价值排序 | 待建立 |
+- 会基础 Python
+- 没系统学过 RAG / Agent
+- 后端知识不完整
+- 想知道每个模块为什么存在
+- 想把项目真正讲清楚
 
-## 旧文档迁移原则
+学习方式：
 
-当前目录仍有 `architecture.md`、`code_walkthrough.md`、`context-engineering.md`、`design.md`、`evaluation-lab.md`、`evaluation.md`、`experiment-notes-2026-09.md`、`hiring-alignment-2026-09.md`、`interview.md`、`learning-path.md`、`resume-guide.md`、`security.md`、`technology-radar-2026.md`、`tuning.md` 等文件。
+```text
+问题
+→ 直觉
+→ 原理
+→ 例子
+→ 项目代码
+→ 跟做
+→ 观察结果
+→ 修改实验
+→ Trade-off
+→ 面试表达
+```
 
-这些文件**现在先不删**。下一阶段按下面规则处理：
+不要“没教先考”。
 
-- 学习原理、示例、跟做、代码阅读：迁入主教材。
-- 招聘 JD、技能覆盖、岗位差距：迁入 `JOB_SKILLS.md`。
-- 算法、笔试、面试 Coding：迁入 `INTERVIEW_ALGORITHMS.md`。
-- 架构、安全、运行时、配置、排错：合并为工程参考。
-- 评测方法、实验数据、消融与失败分析：合并为评测参考。
-- 未来计划：只进入 Roadmap，不和“已实现”混写。
-- 只有确认内容已经迁移、链接已修复后，才删除旧文件。
+### 2. 招聘技能地图
 
-## 教材统一写法
+**[JOB_SKILLS.md](JOB_SKILLS.md)**
 
-主教材以后每个重要知识点尽量遵循同一个顺序：
+回答：
 
-**为什么需要 → 直觉 → 原理 → 最小例子 → 项目真实代码 → 输入输出 → 跟着运行 → 预期结果 → 修改实验 → 常见错误 → trade-off → 招聘为什么问 → 面试怎么解释。**
+- Agent Backend / AI 应用现在到底招什么？
+- 不同职位名称哪些能力其实相同？
+- 国内大厂和海外 Agent 平台团队反复要求什么？
+- 当前项目已经覆盖多少？
+- 哪些只是 Roadmap？
+- 下一步为什么优先补某项？
 
-几个硬规则：
+### 3. 算法与 Coding
 
-- 先教，再练，再复习；不允许没讲就考。
-- 第一次出现的缩写和术语必须解释。
-- 公式先讲用途，再用小数字例子，最后才给公式。
-- 每项能力区分：讲解 / Demo / 已实现 / 有测试 / 有效果证据 / 未实现。
-- “代码存在”不等于“已经掌握”，更不等于“生产级验证”。
-- 不因为 JD 出现一个词就强行接一个框架。
+**[INTERVIEW_ALGORITHMS.md](INTERVIEW_ALGORITHMS.md)**
 
-## 项目真实代码地图
+Hot100 是主干，但不是完整面试。
 
-当前项目已经有足够多的真实工程代码，教材必须绑定这些文件，而不是写成通用教程：
+完整目标：
 
-- `src/rag_agent/ingest/loaders.py`：文件解析。
-- `src/rag_agent/ingest/chunker.py`：分块。
-- `src/rag_agent/ingest/indexer.py`：幂等索引与双库存储协调。
-- `src/rag_agent/retrieval/vector_store.py`：Dense / Qdrant。
-- `src/rag_agent/retrieval/sqlite_store.py`：SQLite / FTS5。
-- `src/rag_agent/retrieval/fusion.py`：RRF。
-- `src/rag_agent/retrieval/hybrid.py`：Hybrid Retrieval。
-- `src/rag_agent/retrieval/reranker.py`：CrossEncoder 重排。
-- `src/rag_agent/agent/graph.py`：LangGraph、查询规划、证据门控、上下文、生成、引用与有界重试。
-- `src/rag_agent/agent/guardrails.py`：安全边界。
-- `src/rag_agent/llm/client.py`：模型 API 适配。
-- `src/rag_agent/api/main.py`：FastAPI / REST / SSE。
-- `src/rag_agent/mcp/server.py`：只读 MCP。
-- `src/rag_agent/evaluation/`：离线评测与指标。
-- `tests/`：各模块可验证行为。
+```text
+Hot100
++ 高频补充算法
++ SQL
++ Backend Coding
++ CS 基础
++ System Design
++ RAG/Agent 项目深挖
++ AI Coding
+```
 
-## 后续整理验收标准
+### 4. 工程参考
 
-整理完成后，一个第一次打开仓库的人应该能快速回答：
+**[ENGINEERING_REFERENCE.md](ENGINEERING_REFERENCE.md)**
 
-1. 项目解决什么问题？
-2. 新电脑怎么启动？
-3. 一份文件怎样一路变成带引用的回答？
-4. Dense、Sparse、RRF、rerank 分别解决什么？
-5. 为什么需要证据门控、拒答和引用校验？
-6. 当前 Agent 到底“Agent”在哪里，哪些高级能力还没有？
-7. 代码在哪里修改？修改后怎么验证？
-8. 企业 Agent Backend 还要求什么？
-9. 算法与 Coding 面试该怎么练？
-10. 下一阶段最值得升级什么？
+需要查：
 
-只要上述问题仍需要在十几份 Markdown 中来回找答案，文档重构就还没有完成。
+- 代码结构
+- 数据流
+- SQLite/Qdrant 一致性
+- API/SSE
+- 安全边界
+- MCP
+- Tool runtime
+- Docker/CI
+- 当前工程限制
+
+时再打开。
+
+### 5. 评测
+
+**[EVALUATION.md](EVALUATION.md)**
+
+包含：
+
+- 单元测试和效果评测区别
+- retrieval metrics
+- gate metrics
+- Agent/tool runtime 应该怎么评
+- 当前实验真实能证明什么
+- 下一步完整消融怎么做
+
+### 6. Roadmap
+
+**[ROADMAP.md](ROADMAP.md)**
+
+按 P0/P1/P2 排序，而不是堆 TODO。
+
+---
+
+## 文档状态词
+
+整个仓库统一使用：
+
+- **已讲解**：文档有内容
+- **有 Demo**：存在最小可运行示例
+- **已实现**：已进入项目代码
+- **有测试**：存在自动测试
+- **有效果证据**：有可重复实验
+- **未实现**：只有知识/招聘记录/Roadmap
+
+这些词不能互相替代。
+
+例如：
+
+> `Tool Registry` 已实现且有测试。
+
+不代表：
+
+> 主 RAG 图已经是完整生产 Tool-Calling Agent。
+
+同样：
+
+> 文档讲了 Redis。
+
+不代表：
+
+> 项目已经接入 Redis。
+
+---
+
+## 当前文档结构为什么这样整理
+
+旧版本有大量并列 Markdown：
+
+- architecture
+- design
+- context engineering
+- tuning
+- security
+- evaluation
+- evaluation lab
+- interview
+- resume guide
+- learning path
+- hiring alignment
+- technology radar
+- experiment notes
+- code walkthrough
+
+它们很多内容重复，而且学习者很难判断先读谁。
+
+现在按“学习、招聘、面试、工程、评测、路线图”六个职责收拢。
+
+Git 历史仍保留旧文件，所以以后需要追溯历史说明时可以从提交记录恢复，
+但它们不再作为日常入口。
+
+---
+
+## 给下一次 Codex / Agent 的维护规则
+
+修改文档前先问：
+
+1. 这段内容应该进入现有哪个核心文档？
+2. 是否真的需要新增 Markdown？
+3. 技术是“讲解”还是“已实现”？
+4. 是否有代码路径？
+5. 是否有测试？
+6. 是否有实验数据？
+7. 是否会造成 README 与真实状态不一致？
+
+默认不要新增新的顶层 docs Markdown。
