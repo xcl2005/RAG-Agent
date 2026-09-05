@@ -165,6 +165,77 @@ def test_agent_returns_grounded_answer_and_remembers_thread(tmp_path):
     assert first["status"] == "answered"
     assert first["citation_validation"]["valid"] is True
     assert second["trace"][0]["history_turns"] == 1
+    nodes = [event["node"] for event in first["trace"]]
+    assert nodes.index("grade_evidence") < nodes.index("prepare_context") < nodes.index("generate_answer")
+    prepared = next(event for event in first["trace"] if event["node"] == "prepare_context")
+    assert prepared["selected_count"] == 1
+    assert prepared["context_chars"] <= prepared["budget_chars"]
+
+
+def test_context_anchor_is_the_first_candidate_that_passes_gate(tmp_path):
+    agent = RAGAgent(
+        make_settings(tmp_path), llm=DisabledLLM(), retriever=FakeRetriever([]), checkpointer=InMemorySaver()
+    )
+    weak = Candidate(chunk_id="weak", text="unrelated", metadata={"source": "weak.md"}, dense_score=0.01)
+    strong = evidence_candidate()
+    prepared = agent.prepare_context(
+        {"question": "哪些证据？", "candidates": [weak.to_dict(), strong.to_dict()]}
+    )
+    assert prepared["sources"][0]["chunk_id"] == strong.chunk_id
+    assert prepared["context_stats"]["diversified"] is True
+
+
+def test_diversity_falls_back_when_anchor_metadata_exceeds_fair_share(tmp_path):
+    agent = RAGAgent(
+        make_settings(tmp_path, max_context_chars=1000),
+        llm=DisabledLLM(),
+        retriever=FakeRetriever([]),
+        checkpointer=InMemorySaver(),
+    )
+    anchor = Candidate(
+        chunk_id="anchor",
+        text="strong evidence",
+        dense_score=0.9,
+        metadata={"source": "x" * 120 + ".md", "heading": "y" * 200},
+    )
+    others = [
+        Candidate(chunk_id=str(i), text="weak evidence", dense_score=0.01, metadata={"source": f"{i}.md"})
+        for i in range(2)
+    ]
+    prepared = agent.prepare_context(
+        {"question": "比较这几份资料", "candidates": [c.to_dict() for c in [anchor, *others]]}
+    )
+    assert [source["chunk_id"] for source in prepared["sources"]] == ["anchor"]
+    assert prepared["context_stats"]["selection_fallback"] == "anchor_only"
+    assert prepared["context_stats"]["input_count"] == 3
+
+
+def test_skiplist_fact_question_does_not_trigger_diversity(tmp_path):
+    agent = RAGAgent(
+        make_settings(tmp_path), llm=DisabledLLM(), retriever=FakeRetriever([]), checkpointer=InMemorySaver()
+    )
+    prepared = agent.prepare_context(
+        {"question": "Redis skiplist 查询复杂度是多少", "candidates": [evidence_candidate().to_dict()]}
+    )
+    assert prepared["context_stats"]["diversified"] is False
+
+
+def test_unfittable_anchor_does_not_generate_from_only_weak_sources(tmp_path):
+    anchor = evidence_candidate()
+    anchor.metadata = {"source": "&" * 400, "heading": "<" * 200}
+    weak = Candidate(chunk_id="weak", text="unrelated", metadata={"source": "weak.md"}, dense_score=0.01)
+    agent = RAGAgent(
+        make_settings(tmp_path, max_context_chars=1000),
+        llm=DisabledLLM(),
+        retriever=FakeRetriever([anchor, weak]),
+        checkpointer=InMemorySaver(),
+    )
+    result = agent.ask("比较这些资料")
+    assert result["failure_kind"] == "generation_failure"
+    assert result["status"] == "error"
+    assert result["sources"] == []
+    generated = next(event for event in result["trace"] if event["node"] == "generate_answer")
+    assert generated["model_called"] is False
 
 
 def test_agent_repairs_missing_citation_once(tmp_path):

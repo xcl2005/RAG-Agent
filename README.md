@@ -1,6 +1,9 @@
 # Adaptive RAG Agent
 
-一个面向招聘展示、同时保留真实工程边界的现代化 RAG 项目：使用
+**学习只读这一份：[项目、原理、动手操作与求职面试手册](docs/PROJECT_HANDBOOK.md)。**
+按“讲解 → 示例 → 跟做”组织，含招聘覆盖差距、新电脑启动和继续开发交接；练习题是学完后的可选复习。
+
+一个带可复现实验和学习路径的文档问答项目：使用
 LangGraph 编排**有界、状态持久化的 Agentic Workflow**，组合多查询改写、
 Dense + Sparse 混合检索、加权 RRF、CrossEncoder 重排、证据门控和服务端引用校验。
 
@@ -8,7 +11,16 @@ Dense + Sparse 混合检索、加权 RRF、CrossEncoder 重排、证据门控和
 模型主要在查询规划与基于证据生成两个位置做受约束决策，并在引用格式失败时最多执行
 一次受限修复。
 
-## 这次升级解决了什么
+## 2026-09：让改进可验证，也能讲清楚
+
+- 上下文工程：新增 `prepare_context`，同范围去重、清单问题来源覆盖、精确字符预算；quote 只展示模型实际看到的原文。
+- 隔离评测：8 份虚构工程文档、32 道题，离线比较 FTS5 基线与术语扩展；报告召回、排序、误拒答及错误放行，不使用私人资料或模型 Key。
+- 学习与面试：从基础 Python 出发的 14 天路线、先回答再看解析的练习 CLI、亲手改代码的实验。只记录本人自评，不自动认定能力。
+
+先读 [单文档手册](docs/PROJECT_HANDBOOK.md)；升级依据见 [最新招聘样本与取舍](docs/hiring-alignment-2026-09.md)，
+算法详解见 [上下文工程](docs/context-engineering.md)，实验入口见 [评测实验室](docs/evaluation-lab.md)。
+
+## 已有工程能力
 
 原项目已经具备 Hybrid RAG 的教学骨架，但 Agent 图仍是线性的，引用只依赖 Prompt，
 SQLite 与 Qdrant 缺少文档版本管理，上传和本地路径接口也没有完整边界。
@@ -40,7 +52,7 @@ CI 对单元测试设置了 **75% 总覆盖率门槛**。这不是模型效果�
 ```mermaid
 flowchart LR
     W["Web UI"] --> API["FastAPI /api/v1"]
-    H["HTTP / SSE / Swagger"] --> API
+    HTTP["HTTP / SSE / Swagger"] --> API
     API --> G["LangGraph adaptive workflow"]
     CLI["CLI"] --> G
     MC["MCP Client"] --> MCP["Read-only MCP server"]
@@ -53,7 +65,8 @@ flowchart LR
     S --> F
     F --> E{"Evidence sufficient?"}
     E -- "no, bounded retry" --> P
-    E -- "yes" --> A["Grounded generation"]
+    E -- "yes" --> CT["Context selection + bounded evidence"]
+    CT --> A["Grounded generation"]
     A --> C{"Citation validator"}
     C -- "repair once" --> A
     C -- "valid" --> O["Answer + sources + trace"]
@@ -68,6 +81,8 @@ flowchart LR
 - [安全边界](docs/security.md)
 - [简历与面试表达](docs/resume-guide.md)
 - [代码阅读路线](docs/code_walkthrough.md)
+- [14 天学习与动手路线](docs/learning-path.md)
+- [招聘样本与本轮选型](docs/hiring-alignment-2026-09.md)
 
 ## 快速开始
 
@@ -318,8 +333,14 @@ MCP 是这个知识库的互操作接口，不替代 LangGraph 工作流。服�
   --output-dir reports
 ```
 
-`data/eval/sample_retrieval.jsonl` 只是格式示例。用于简历前，应替换或扩充为
-版本化、可公开的测试资料和 50–80 道题，并保留真实的 baseline/ablation 报告。
+`data/eval/sample_retrieval.jsonl` 只是格式示例。也可以先运行不依赖 Qdrant、模型下载或 Key 的实验：
+
+```powershell
+.\.venv\Scripts\python scripts/eval_portfolio.py --profile sparse
+```
+
+它会隔离创建临时 SQLite，使用 `data/eval/portfolio` 的 8 文档 / 32 题，生成两组真实结果。
+这是教学与回归集，不是独立测试集，也不能证明线上生成效果；进一步扩充并冻结保留集后再谈泛化收益。
 
 ## 项目结构
 
@@ -330,6 +351,7 @@ src/rag_agent/
 ├── evaluation/     # Recall/MRR/nDCG 指标
 ├── ingest/         # 文件解析、结构化切片、幂等索引
 ├── llm/            # Responses / Chat Completions 适配层
+├── learning/       # 离线面试练习、手写实验与本人自评
 ├── mcp/            # 只读 MCP server
 ├── retrieval/      # Qdrant、FTS5、加权 RRF、reranker
 └── web/            # 零构建演示界面
@@ -358,14 +380,13 @@ src/rag_agent/
 
 ## 简历描述
 
-可以在完成你自己的真实评测后写成：
+完成阅读、亲手实验和真实评测后，再按实际贡献取用：
 
-> 独立设计并实现基于 LangGraph 的有界、状态持久化 Agentic RAG 系统，完成多查询规划、
-> Dense/FTS5 混合检索、加权 RRF、CrossEncoder 重排、证据门控与服务端引用校验；
-> 通过文档哈希与原子版本替换实现幂等增量索引，并建设 FastAPI/SSE、MCP、Docker、
-> CI 和离线 Recall/MRR/nDCG 评测链路。
+> 基于 LangGraph 构建并迭代文档问答作品，使用 Dense/FTS5、RRF、重排与引用编号校验；
+> 围绕上下文预算和拒答问题补充回归测试，在隔离语料上比较检索配置并记录失败案例。
 
-不要写“准确率提升 30%”之类未经报告证明的数字。可核验的面试表达和 STAR 模板见
+上述内容不自动等于你的个人经历。明确 AI 辅助、开源基础和自己负责的模块，不写未经证明的
+“独立原创”“生产级”“准确率提升 30%”。可核验的面试表达和练习见
 [简历指南](docs/resume-guide.md)。
 
 ## License

@@ -7,7 +7,8 @@ XML-like containers. They never become system/developer instructions.
 from __future__ import annotations
 
 import html
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from rag_agent.agent.guardrails import detect_prompt_injection
@@ -64,6 +65,42 @@ class ContextBundle:
     candidates: list[Candidate]
     truncated: bool
     character_count: int
+    input_count: int = 0
+    duplicate_count: int = 0
+
+
+def _source_key(candidate: Candidate) -> str:
+    # Do not merge identical statements from different documents: independent
+    # provenance (and conflicting versions elsewhere) must remain inspectable.
+    return str(
+        candidate.metadata.get("document_id") or candidate.metadata.get("source") or candidate.chunk_id
+    )
+
+
+def _select_candidates(candidates: list[Candidate], diversify: bool) -> list[Candidate]:
+    """Remove only same-scope whitespace duplicates; optionally interleave sources.
+
+    相似不等于重复：不做模糊相似度去重，避免把只差数字、否定词的冲突证据丢掉。
+    列举/比较问题才优先覆盖不同文档；事实定位问题保留检索排名。
+    """
+    seen: set[tuple[str, ...]] = set()
+    groups: dict[str, list[Candidate]] = {}
+    unique: list[Candidate] = []
+    for candidate in candidates:
+        # "timeout = 30" in Production and Staging is not the same evidence.
+        key = (
+            _source_key(candidate),
+            *(str(candidate.metadata.get(field, "")) for field in ("heading", "page", "document_unit_index")),
+            re.sub(r"\s+", " ", candidate.text).strip(),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(candidate)
+        groups.setdefault(key[0], []).append(candidate)
+    if not diversify:
+        return unique
+    return [group[index] for index in range(len(unique)) for group in groups.values() if index < len(group)]
 
 
 def _source_location(candidate: Candidate) -> str:
@@ -89,7 +126,7 @@ def _source_location(candidate: Candidate) -> str:
 
 
 def _escaped_prefix(text: str, budget: int) -> str:
-    """Return the longest HTML-escaped text prefix within ``budget`` chars.
+    """Return the raw prefix whose HTML-escaped form fits ``budget`` chars.
 
     Truncating after escaping can split an entity such as ``&lt;``. A binary
     search over the raw prefix preserves both valid escaping and the hard
@@ -105,15 +142,15 @@ def _escaped_prefix(text: str, budget: int) -> str:
             low = middle
         else:
             high = middle - 1
-    return html.escape(text[:low], quote=False)
+    return text[:low]
 
 
-def build_context(candidates: list[Candidate], max_chars: int) -> ContextBundle:
+def build_context(candidates: list[Candidate], max_chars: int, *, diversify: bool = False) -> ContextBundle:
     """Build a bounded context and retain only sources the model actually sees.
 
-    The previous implementation returned all retrieved sources even when the
-    context budget had excluded some of them. Keeping one exact list makes
-    server-side citation validation reliable.
+    Count escaped wrappers AND separators in the character budget. This is a
+    deterministic character bound, not a tokenizer/provider token guarantee.
+    Candidate copies contain only the text actually sent to the model.
     """
 
     blocks: list[str] = []
@@ -121,40 +158,50 @@ def build_context(candidates: list[Candidate], max_chars: int) -> ContextBundle:
     used_chars = 0
     truncated = False
 
-    for index, candidate in enumerate(candidates, start=1):
-        candidate.security_flags = detect_prompt_injection(candidate.text)
-        flags = ",".join(candidate.security_flags) or "none"
+    selected = _select_candidates(candidates, diversify)
+    pending_sources = {_source_key(candidate) for candidate in selected}
+    for candidate in selected:
+        security_flags = detect_prompt_injection(candidate.text)
+        flags = ",".join(security_flags) or "none"
         raw_text = candidate.text.strip()
+        if not raw_text:
+            continue
         escaped_text = html.escape(raw_text, quote=False)
+        index = len(blocks) + 1  # Skipping a block must not leave gaps in [S1..Sn].
         prefix = f'<source id="S{index}" {_source_location(candidate)} security_flags="{flags}">\n<content>\n'
         suffix = "\n</content>\n</source>"
         block = f"{prefix}{escaped_text}{suffix}"
-
-        if used_chars + len(block) > max_chars:
-            remaining = max_chars - used_chars
-            # Always provide at least part of the top-ranked result. This avoids
-            # passing an empty context after the evidence gate has succeeded.
-            # Only content is truncated; the untrusted-data wrapper always
-            # remains syntactically closed.
-            content_budget = remaining - len(prefix) - len(suffix)
-            if not blocks and content_budget > 0:
-                escaped_prefix = _escaped_prefix(raw_text, content_budget)
-                block = f"{prefix}{escaped_prefix}{suffix}"
-                blocks.append(block)
-                used_candidates.append(candidate)
-                used_chars += len(block)
+        separator_size = 2 if blocks else 0
+        remaining = max_chars - used_chars - separator_size
+        # For overview questions reserve fair space for up to four pending
+        # documents. Otherwise one very long first hit can consume everything.
+        block_budget = (
+            remaining // min(len(pending_sources), 4) if diversify and pending_sources else remaining
+        )
+        pending_sources.discard(_source_key(candidate))
+        if len(block) > block_budget:
             truncated = True
-            break
-
+            if blocks and not diversify:
+                # A large second hit must not prevent a later smaller hit fitting.
+                continue
+            content_budget = block_budget - len(prefix) - len(suffix)
+            raw_text = _escaped_prefix(raw_text, content_budget)
+            if not raw_text:
+                continue
+            block = f"{prefix}{html.escape(raw_text, quote=False)}{suffix}"
         blocks.append(block)
-        used_candidates.append(candidate)
-        used_chars += len(block)
+        # Never mutate retrieval/checkpoint objects. Quotes now correspond to
+        # the visible prefix, not to unseen text beyond the context cutoff.
+        used_candidates.append(replace(candidate, text=raw_text, security_flags=security_flags))
+        used_chars += separator_size + len(block)
 
     return ContextBundle(
         text="\n\n".join(blocks),
         candidates=used_candidates,
         truncated=truncated,
         character_count=used_chars,
+        input_count=len(candidates),
+        duplicate_count=len(candidates) - len(selected),
     )
 
 

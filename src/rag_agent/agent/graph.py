@@ -6,7 +6,7 @@ query planning and grounded answer generation. It never performs unbounded
 
 Graph:
     initialize -> plan_queries -> retrieve -> grade_evidence
-       -> sufficient: generate -> validate_citations -> [repair once] -> finalize
+       -> sufficient: prepare_context -> generate -> validate_citations -> [repair once] -> finalize
        -> weak: retry plan/retrieve (bounded) -> abstain -> finalize
 """
 
@@ -57,6 +57,7 @@ class AgentState(TypedDict, total=False):
     candidates: list[dict[str, Any]]
     evidence: dict[str, Any]
     context: str
+    context_stats: dict[str, Any]
     answer: str
     sources: list[dict[str, Any]]
     abstained: bool
@@ -320,6 +321,7 @@ class RAGAgent:
         workflow.add_node("plan_queries", self.plan_queries)
         workflow.add_node("retrieve", self.retrieve)
         workflow.add_node("grade_evidence", self.grade_evidence)
+        workflow.add_node("prepare_context", self.prepare_context)
         workflow.add_node("generate_answer", self.generate_answer)
         workflow.add_node("validate_citations", self.validate_answer_citations)
         workflow.add_node("repair_citations", self.repair_citations)
@@ -336,10 +338,11 @@ class RAGAgent:
             self.route_after_evidence,
             {
                 "retry": "plan_queries",
-                "answer": "generate_answer",
+                "answer": "prepare_context",
                 "abstain": "abstain",
             },
         )
+        workflow.add_edge("prepare_context", "generate_answer")
         workflow.add_edge("generate_answer", "validate_citations")
         workflow.add_conditional_edges(
             "validate_citations",
@@ -372,6 +375,7 @@ class RAGAgent:
             "candidates": [],
             "evidence": {},
             "context": "",
+            "context_stats": {},
             "answer": "",
             "sources": [],
             "abstained": False,
@@ -497,13 +501,59 @@ class RAGAgent:
             return "retry"
         return "abstain"
 
+    def prepare_context(self, state: AgentState) -> AgentState:
+        """Make evidence selection a deterministic, separately observable step.
+
+        门控通过不代表所有候选都相关。把排名中首个过门控的候选放在最前，
+        避免预算很小时只留下弱证据。仍不把检索分数当成答案正确概率。
+        """
+        started = time.perf_counter()
+        candidates = _candidates(state)
+        anchor = next(
+            (item for item in candidates if assess_evidence([item], self.settings).sufficient), None
+        )
+        if anchor is not None:
+            candidates = [anchor, *(item for item in candidates if item is not anchor)]
+        diversify = bool(
+            re.search(
+                r"哪些|有什么|列出|汇总|对比|比较|总结|\b(?:overview|compare|list)\b", state["question"], re.I
+            )
+        )
+        bundle = build_context(candidates, self.settings.max_context_chars, diversify=diversify)
+        selection_fallback = None
+        if not any(assess_evidence([item], self.settings).sufficient for item in bundle.candidates):
+            # Fair sharing can exclude an anchor with long path/heading metadata.
+            # Re-check selected signals, then reserve the full budget for the
+            # anchor. If even that cannot fit, generation reports empty context.
+            # This is NOT semantic re-grading of a truncated passage.
+            bundle = build_context([anchor] if anchor is not None else [], self.settings.max_context_chars)
+            selection_fallback = "anchor_only"
+        sources = source_list(bundle.candidates)
+        stats = {
+            "input_count": len(candidates),
+            "selected_count": len(sources),
+            "duplicate_count": bundle.duplicate_count,
+            "document_count": len({str(item["source"]) for item in sources}),
+            "context_chars": bundle.character_count,
+            "budget_chars": self.settings.max_context_chars,
+            "context_truncated": bundle.truncated,
+            "diversified": diversify,
+            "selection_fallback": selection_fallback,
+        }
+        return {
+            "context": bundle.text,
+            "sources": sources,
+            "context_stats": stats,
+            "events": _event(state, "prepare_context", started, **stats),
+        }
+
     def generate_answer(self, state: AgentState) -> AgentState:
         started = time.perf_counter()
-        bundle = build_context(_candidates(state), self.settings.max_context_chars)
-        sources = source_list(bundle.candidates)
+        context = state.get("context", "")
+        sources = state.get("sources", [])
         llm_calls = state.get("llm_calls", [])
 
-        if not bundle.candidates or not bundle.text:
+        if not sources or not context:
             return {
                 "answer": GENERATION_FAILURE_MESSAGE,
                 "sources": [],
@@ -525,7 +575,7 @@ class RAGAgent:
             return {
                 "answer": GENERATION_FAILURE_MESSAGE,
                 "sources": sources,
-                "context": bundle.text,
+                "context": context,
                 "abstained": True,
                 "failure_kind": "generation_failure",
                 "error": "llm_not_configured",
@@ -533,7 +583,7 @@ class RAGAgent:
                     state,
                     "generate_answer",
                     started,
-                    context_chars=bundle.character_count,
+                    context_chars=len(context),
                     source_count=len(sources),
                     model_called=False,
                 ),
@@ -542,7 +592,7 @@ class RAGAgent:
         try:
             call = self.llm.generate(
                 ANSWER_INSTRUCTIONS,
-                render_answer_prompt(state["question"], bundle.text),
+                render_answer_prompt(state["question"], context),
             )
             llm_calls = [*llm_calls, {"purpose": "answer", **call.usage_dict()}]
             answer = call.text.strip()
@@ -550,7 +600,7 @@ class RAGAgent:
                 return {
                     "answer": GENERATION_FAILURE_MESSAGE,
                     "sources": sources,
-                    "context": bundle.text,
+                    "context": context,
                     "abstained": True,
                     "failure_kind": "generation_failure",
                     "llm_calls": llm_calls,
@@ -568,15 +618,15 @@ class RAGAgent:
             return {
                 "answer": answer,
                 "sources": sources,
-                "context": bundle.text,
+                "context": context,
                 "failure_kind": None,
                 "llm_calls": llm_calls,
                 "events": _event(
                     state,
                     "generate_answer",
                     started,
-                    context_chars=bundle.character_count,
-                    context_truncated=bundle.truncated,
+                    context_chars=len(context),
+                    context_truncated=state.get("context_stats", {}).get("context_truncated", False),
                     source_count=len(sources),
                     model_called=True,
                 ),
@@ -591,7 +641,7 @@ class RAGAgent:
             return {
                 "answer": GENERATION_FAILURE_MESSAGE,
                 "sources": sources,
-                "context": bundle.text,
+                "context": context,
                 "abstained": True,
                 "failure_kind": "generation_failure",
                 "llm_calls": llm_calls,

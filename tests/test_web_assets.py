@@ -55,6 +55,9 @@ def test_web_client_keeps_streaming_upload_and_accessibility_guards():
     assert "clearAfterMs" in script
     assert 'failureKind === "generation_failure"' in script
     assert 'failureKind === "citation_failure"' in script
+    assert 'prepare_context: "整理证据上下文"' in script
+    assert "event.budget_chars" in script
+    assert "event.selection_fallback" in script
     assert "overlayInertState" in script
     assert "event.isComposing" in script
     assert "AbortController" in script

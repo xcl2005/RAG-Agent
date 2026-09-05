@@ -33,6 +33,13 @@ jobs:
         run: mypy
       - name: Unit tests
         run: pytest -m "not integration" --cov=rag_agent --cov-report=term-missing --cov-report=xml
+      - name: Offline retrieval experiment smoke
+        if: matrix.python-version == '3.12'
+        # Uses a disposable SQLite index and synthetic corpus, never API keys.
+        run: python scripts/eval_portfolio.py --profile sparse --output-dir reports/portfolio
+      - name: Offline learning CLI smoke
+        if: matrix.python-version == '3.12'
+        run: python scripts/practice_interview.py show q01
       - uses: actions/setup-node@v4
         if: matrix.python-version == '3.12'
         with:

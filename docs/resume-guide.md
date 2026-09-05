@@ -2,6 +2,10 @@
 
 ## 1. 使用原则
 
+你目前能写基础 Python、还讲不清项目，建议先完成 [14 天学习路线](learning-path.md) 的 A/B/E 实验。
+本页是可取用的表达材料，不是你已完成全部工作的证明。AI 辅助实现、已有开源基础、你亲自验证和改动的部分要分开。
+不要伪造“独立原创”、工作经历或提交历史；也不必为了显得像自己写的而故意降低代码质量。
+
 这份指南用于把当前仓库中已经实现、可以通过代码或命令验证的能力写进简历。推荐遵循三条规则：
 
 1. 只描述自己能够解释并现场演示的实现。
@@ -24,6 +28,8 @@
 
 ### 2.2 简历三条版本
 
+以下三条是仓库能力清单，只选择自己能解释、实际参与的部分。尚未自己复现评测时不要填写效果数字。
+
 > **Adaptive RAG Agent｜Python / FastAPI / LangGraph / Qdrant / SQLite / MCP**
 >
 > - 设计有界 LangGraph 工作流，将查询规划、混合检索、证据门控、答案生成、引用校验和拒答拆分为可测试节点；保留原始问题并限制检索重试次数，证据不足或引用修复失败时主动拒答。
@@ -39,6 +45,15 @@
 > 完成一个企业文档问答系统的端到端工程实现，覆盖 PDF、DOCX、Markdown、TXT、HTML 解析、结构感知切分、向量化、关键词索引、混合召回、重排、证据回答和来源展示。项目重点不是堆叠多智能体，而是用有限状态图控制模型调用、失败降级和可验证输出。
 
 该版本适合不希望在简历中突出“Agent”概念时使用。
+
+### 2.4 亲手练习后的短版本
+
+完成学习实验后，可以按真实情况改写为：
+
+> 基于 Python / LangGraph 迭代文档问答作品，围绕上下文预算与拒答问题补充测试；
+> 在隔离虚构语料上比较 FTS5 基线与查询扩展，记录检索排序、误拒答及错误放行，分析两个失败案例。
+
+再补一句你具体改了哪个函数/测试。不要仅因仓库中存在模块，就声称每个模块都是你独立设计。
 
 ## 3. 每项说法如何核验
 
@@ -56,6 +71,8 @@
 | Web UI | `src/rag_agent/web/` | 启动 API 后打开 `/`。 |
 | MCP | `src/rag_agent/mcp/server.py` | 安装 `.[mcp]`，检查两个 tools、一个 resource 和一个 prompt。 |
 | 离线评测 | `evaluation/metrics.py`、`scripts/eval_retrieval.py` | 生成 `reports/retrieval-eval.json` 和 Markdown 报告。 |
+| 隔离对照实验 | `evaluation/lab.py`、`scripts/eval_portfolio.py` | 不用模型 Key / Docker，运行 8 文档 / 32 题并检查逐题结果。 |
+| 上下文工程 | `prompts.py`、`graph.py::prepare_context` | 核对预算、同范围去重、来源覆盖与 quote 可见性测试。 |
 | CI | `.github/workflows/ci.yml` | 查看 Python 版本矩阵、Ruff、pytest coverage 和 Docker build。 |
 
 ## 4. STAR 讲述框架
@@ -81,7 +98,7 @@
 建议按四层讲：
 
 1. **检索层**
-   - 始终保留原始问题。
+   - 首轮保留原始问题，重试优先采用尚未尝试的变体。
    - 生成少量互补查询。
    - 对每个查询执行 Qdrant dense 与 SQLite FTS5。
    - 使用加权 RRF 融合排名，原问题权重更高。
@@ -141,16 +158,16 @@ Qdrant 解决语义相似问题，FTS5 更适合错误码、表名、编号等�
 
 **答：**
 
-余弦相似度、BM25 和不同查询的分数尺度不一致，直接相加需要复杂校准。RRF 只使用排名，更适合异构召回。项目进一步给原始问题更高权重，并把理论最大 RRF 分数归一化到 `[0, 1]`，使查询变体数量变化时门控阈值更稳定。
+余弦相似度、BM25 和不同查询的分数尺度不一致，直接相加需要校准。RRF 只使用排名，更适合异构召回。
+项目给原始问题更高权重，并将融合分数归一化用于排序和展示。RRF 不参与证据门控，不能把它的归一化说成门控概率校准。
 
 ### Q5：如何判断证据是否充分？
 
 **答：**
 
-使用 reranker 时比较固定 score mode 归一化后的 `min_rerank_relevance`；reranker
-不可用时，检查候选中的最佳 dense cosine 或 sparse token coverage。RRF 只用于融合排名，
-不会因为 top-1 归一化为 1 就让证据通过。阈值应在版本化评测集上调优；当前
-`confidence` 只是最佳门控信号，不是答案正确概率。
+分别检查 reranker 固定归一化分数、dense cosine 和 sparse token coverage，各自与独立阈值比较；
+任一路通过即放行，是 OR 策略，不是 reranker 优先一票否决。RRF 只用于融合排名。
+OR 减少单路误拒答，也可能增加错误放行，需要难负例验证。`confidence` 只是最佳门控信号，不是答案正确概率。
 
 ### Q6：引用校验能保证答案真实吗？
 
@@ -194,11 +211,11 @@ provider 的 token 增量传到前端。
 
 **答：**
 
-- 查询规划失败：回退到原始问题。
+- 查询规划失败：保留确定性查询变体，首轮含原问题，重试优先新变体。
 - dense 失败：继续用 FTS5。
 - FTS5 失败：dense 可用时继续。
 - reranker 失败：按 fusion score 排序。
-- LLM 未配置或生成失败：检索仍可执行，但最终明确拒答。
+- LLM 未配置或生成失败：检索仍可执行，最终返回 `generation_failure` 技术错误，不伪装成证据不足。
 - 两个检索后端都没有有效结果：有限重试后拒答。
 - readiness 会把任一存储依赖失败报告为 503/degraded。
 
@@ -212,11 +229,15 @@ MCP 是跨宿主暴露知识库能力的协议边界，不替代 LangGraph 或�
 
 **答：**
 
-仓库实现了确定性的检索 Recall@5/10、MRR、nDCG@5/10 和检索延迟统计，并输出 JSON/Markdown 报告。当前样例数据很小，`should_answer` 还没有进入拒答 Precision/Recall 计算，也没有自动化 claim-level faithfulness 指标。因此只能说“建立了检索评测基础”，不能说“完整解决了 RAG 评测”。
+已有 Recall、MRR、nDCG、延迟和基于 `should_answer` 的门控误拒答/错误放行及 Precision/Recall。
+新增实验室用 8 份虚构文档 / 32 题比较 sparse 基线与术语扩展，保存数据哈希、参数和代码状态。
+没有测量真实 GLM 的生成准确率，也没有自动化逐句 faithfulness 或独立保留集，不能说“完整解决了 RAG 评测”。
 
 ## 6. 可演示脚本
 
 面试现场建议控制在 5–8 分钟。
+
+不依赖服务的后备演示和 20 分钟模拟追问见 [面试演练](interview.md)。
 
 ### 6.1 启动与健康检查
 
@@ -292,13 +313,14 @@ python scripts/eval_retrieval.py --file data/eval/sample_retrieval.jsonl
 - MRR。
 - nDCG@5/10。
 - 检索 mean、p50、p95。
+- 基于 `should_answer` 的门控误拒答率、错误放行率与 Precision/Recall（不是 LLM 最终拒答质量）。
 
 不能从当前脚本推导：
 
 - 答案正确率。
 - 幻觉下降百分比。
 - 引用语义准确率。
-- 拒答 Precision/Recall。
+- LLM 生成答案的正确性与最终拒答质量。
 - 并发吞吐量。
 - 端到端 LLM TTFT。
 
@@ -331,9 +353,9 @@ python scripts/eval_retrieval.py --file data/eval/sample_retrieval.jsonl
 
 按招聘价值排序：
 
-1. 把评测集扩展到至少几十道有 `relevant_sources` 或答案 span 的问题。
+1. 在现有 32 题开发集之外冻结独立保留集，增加答案 span 和人工复核。
 2. 增加 dense-only、sparse-only、hybrid、hybrid+rerank 消融报告。
-3. 增加不可回答问题的拒答 Precision/Recall。
+3. 把已有门控误拒答/错误放行扩展到真实模型最终回答评测，注意二者口径不同。
 4. 增加 claim-to-citation 人工标注集，而不是直接依赖未经校准的 LLM Judge。
 5. 记录 1k/10k/100k chunks 下的检索延迟、RSS 和索引耗时。
 6. 增加真实 Qdrant 的集成测试和一个 UI 端到端测试。

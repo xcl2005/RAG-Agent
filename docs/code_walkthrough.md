@@ -2,6 +2,9 @@
 
 建议按“合同 → 入库 → 检索 → Agent → API”的顺序阅读，而不是从目录逐文件扫。
 
+如果目前只会基础 Python，先用 [14 天学习路线](learning-path.md) 的每日任务。
+配套 [隔离实验室](evaluation-lab.md) 不需要模型 Key 或 Docker，可以先读短链路再看完整服务。
+
 ## 1. 配置和数据合同
 
 - `src/rag_agent/config.py`：所有环境配置、数值边界和跨字段校验。
@@ -57,7 +60,7 @@ initialize
   -> grade_evidence
      -> retry plan (bounded)
      -> abstain
-     -> generate_answer
+     -> prepare_context -> generate_answer
   -> validate_citations
      -> repair once
      -> citation_failure
@@ -66,6 +69,7 @@ initialize
 
 - `llm/client.py` 只负责 Responses / Chat Completions 传输和结构化输出，不拥有第二套 Agent loop。
 - `prompts.py` 构造模型真正看到的证据，并确保返回来源与上下文一致。
+- `prepare_context` 将选材独立成一个可观察节点；先读 [上下文工程](context-engineering.md)，再看预算与去重测试。
 - `guardrails.py` 负责输入清洗、注入信号和引用编号验证。
 - `SqliteSaver` 按 `thread_id` 保存状态；目前用于持久化多轮，不等同于完整的任务恢复产品。
 

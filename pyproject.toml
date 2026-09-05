@@ -41,8 +41,8 @@ dev = [
     "ruff>=0.16,<1",
 ]
 mcp = [
-    # MCP Python SDK v2 is not stable until 2026-07-27. Keep the current
-    # stable v1 contract explicit so a future major release cannot break CI.
+    # Keep the tested v1 contract explicit; evaluate a major migration in CI
+    # before changing the adapter, rather than relying on release predictions.
     "mcp[cli]>=1.28,<2",
 ]
 
@@ -61,6 +61,7 @@ include = [
     "LICENSE",
     "README.md",
     "data/eval/sample_retrieval.jsonl",
+    "data/eval/portfolio",
     "docs",
     "scripts",
     "src/rag_agent",

@@ -71,6 +71,7 @@ const NODE_LABELS = {
   plan_queries: "规划检索查询",
   retrieve: "执行混合检索",
   grade_evidence: "评估证据充分性",
+  prepare_context: "整理证据上下文",
   generate_answer: "生成有依据的回答",
   validate_citations: "校验引用编号",
   repair_citations: "修复引用格式",
@@ -798,7 +799,7 @@ function renderTraceInspector(events, body = {}, running = false) {
       <strong>工作流将在这里展开</strong>
       <p>提问后实时显示每个 Agent 节点的状态与耗时。</p>
       <ol class="workflow-preview" aria-label="工作流预览">
-        <li>规划</li><li>检索</li><li>门控</li><li>生成</li><li>校验</li>
+        <li>检索</li><li>门控</li><li>整理</li><li>生成</li><li>校验</li>
       </ol>`;
     return;
   }
@@ -824,6 +825,7 @@ function renderTraceInspector(events, body = {}, running = false) {
               <div class="trace-copy">
                 <strong>${escapeHtml(label)}</strong>
                 <span>${escapeHtml(event.node || "node")}</span>
+                ${event.node === "prepare_context" ? `<span>${Number(event.selected_count || 0)} 个片段 · ${Number(event.document_count || 0)} 份资料 · 去重 ${Number(event.duplicate_count || 0)} 个<br>${Number(event.context_chars || 0)} / ${Number(event.budget_chars || 0)} 字符${event.context_truncated ? " · 已裁剪" : ""}${event.selection_fallback ? " · 强证据优先回退" : ""}</span>` : ""}
               </div>
               <span class="trace-latency">${Number(event.latency_ms || 0).toFixed(1)} ms</span>
             </div>`;

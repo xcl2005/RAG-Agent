@@ -68,9 +68,10 @@ flowchart TD
     Start((START)) --> Init["initialize<br/>规范化问题、读取最近历史"]
     Init --> Plan["plan_queries<br/>保留原问题 + 结构化查询规划"]
     Plan --> Retrieve["retrieve<br/>多查询 Dense + FTS5"]
-    Retrieve --> Grade["grade_evidence<br/>按当前排序信号选择独立阈值"]
+    Retrieve --> Grade["grade_evidence<br/>三路绝对相关信号 OR 门控"]
 
-    Grade -->|"证据充分"| Generate["generate_answer<br/>基于实际上下文生成"]
+    Grade -->|"证据充分"| Context["prepare_context<br/>去重、来源覆盖、精确字符预算"]
+    Context --> Generate["generate_answer<br/>基于实际上下文生成"]
     Grade -->|"证据不足且未达上限"| Plan
     Grade -->|"证据不足且达到上限"| Abstain["abstain<br/>明确拒答"]
 
@@ -90,13 +91,14 @@ flowchart TD
 | 节点 | 已实现职责 |
 |---|---|
 | `initialize` | NFKC 规范化用户输入、去控制字符、校验长度，并从 checkpoint 状态保留最近 6 轮历史。 |
-| `plan_queries` | 模型可用时生成符合 Pydantic Schema 的查询计划；无论模型输出什么，原始问题都保留在第一位。 |
+| `plan_queries` | 模型可用时生成符合 Pydantic Schema 的查询计划；首轮保留原问题，重试优先选择上一批未尝试的确定性变体。 |
 | `retrieve` | 对查询变体执行 dense 与 FTS5 检索，使用加权 RRF 融合，再用原问题进行可选 rerank。 |
-| `grade_evidence` | reranker 可用时检查其固定归一化信号；否则检查 dense cosine 或 sparse token coverage。RRF 只参与排序。 |
-| `generate_answer` | 只把上下文预算内的来源交给模型；返回的 sources 与模型看到的来源保持一致。 |
+| `grade_evidence` | 分别检查 reranker 固定归一化分数、dense cosine、sparse token coverage；任一路达到自己的阈值即通过。RRF 只参与排序。 |
+| `prepare_context` | 保留强证据锚点；同语义范围去重；清单/比较问题优先覆盖不同来源；精确限制字符，生成实际可见原文的 sources 与预算统计。 |
+| `generate_answer` | 使用已经整理的上下文；区分无上下文、未配置模型、空输出与 provider 失败。 |
 | `validate_citations` | 检查实质性回答是否至少包含一个 `[S数字]`，以及所有编号是否属于本次上下文。 |
 | `repair_citations` | 引用不合法时，仅允许模型依据原上下文修复一次。 |
-| `abstain` / `citation_failure` | 返回明确拒答，并清空低相关候选的路径与 quote，避免门控旁路。 |
+| `abstain` / `citation_failure` | 证据不足时清空低相关候选；引用失败是技术失败，保留已过门控的来源用于排查。 |
 | `finalize` | 汇总状态、相关性信号、最近历史、节点耗时和模型 usage。 |
 
 ### 3.3 为什么采用有界重试
@@ -141,7 +143,7 @@ flowchart LR
 
 - dense 与 BM25/FTS5 原始分数不可直接相加，因此融合阶段只比较排名。
 - 原问题查询权重最高，自动生成的查询权重逐步降低，避免查询改写覆盖错误码和专有名词。
-- RRF 根据所有有效 ranking 的总权重归一化到 `[0, 1]`，降低查询变体数量对阈值的影响。
+- RRF 根据所有有效 ranking 的总权重归一化到 `[0, 1]`，用于排名与展示；不用于证据门控阈值。
 - CrossEncoder 的原始分数单独保留；排序用分数经稳定 sigmoid 映射后的 `[0, 1]` 相关性。
 - `confidence` 是当前最佳检索相关性信号，不是“答案正确概率”。
 
@@ -178,9 +180,12 @@ flowchart LR
 - 文档文本经过 HTML 转义后放入 XML-like `<source>` / `<content>` 容器。
 - 检测到的 prompt injection 信号记录在 `security_flags`。
 - 风险检测只做标记，不静默删除可能合法的安全文档。
-- 上下文按 `MAX_CONTEXT_CHARS` 截断。
+- `prepare_context` 显式执行同范围去重与按意图的来源覆盖，记录片段数、文档数、去重数和预算回退。
+- 上下文按 `MAX_CONTEXT_CHARS` 限制，转义、标签和分隔符全部计数；这不是整次请求的 token 限制。
 - 即使首个 chunk 超过预算，也会在预算足够时保留其一部分，避免证据门控通过后向模型传入空上下文。
-- API 只返回真正进入上下文的候选来源，因此 `[S1]` 等编号与模型输入一致。
+- API 使用实际可见文本的候选副本生成 quote，因此 `[S1]` 等编号及原文片段与模型输入一致。
+
+算法取舍、失败回退和动手题见 [上下文工程](context-engineering.md)。
 
 ### 4.2 校验范围
 
@@ -284,6 +289,7 @@ sequenceDiagram
 | `POST /api/v1/documents` | 有数量、大小、后缀、文件名和部分 magic bytes 检查的上传。 |
 | `GET /api/v1/jobs/{job_id}` | 查询当前进程内导入任务状态。 |
 | `GET /api/v1/sources` | 查看文档清单、版本哈希、状态和 chunk 数。 |
+| `DELETE /api/v1/sources/{document_id}` | 鉴权删除受管资料，先清理正文索引，再补偿清理向量与上传副本；前端批量删除逐项调用。 |
 
 普通聊天/读取接口可通过 `API_ACCESS_KEY` 启用共享密钥校验；上传在该 Key 未配置时关闭。
 服务器路径导入和 reset 使用独立 `ADMIN_API_KEY`，未配置时同样关闭。两者都只适合本地
@@ -302,7 +308,7 @@ sequenceDiagram
 - `thread_id` 保存在浏览器 `localStorage`；API Key 保存在 `sessionStorage`。
   聊天允许本地无 Key 演示，但上传在 Key 未配置时关闭。
 
-UI 不包含账号系统、文档删除、评测看板或 token 流式渲染。
+UI 支持多选批量删除；不包含账号系统、评测看板或 token 流式渲染。
 
 ### 6.3 MCP
 
@@ -353,7 +359,9 @@ MCP 不暴露上传、任意路径导入或 reset，避免宿主 Agent 通过协
 - 每题检索耗时，以及 mean、p50、p95。
 - JSON 和 Markdown 报告。
 
-当前样例集规模很小，且 `should_answer` 尚未进入拒答指标计算。因此生成质量、引用语义正确率和拒答 Precision/Recall 仍需单独建设，不能从现有检索报告推导。
+`should_answer` 已用于门控的误拒答/错误放行与 Precision/Recall，但这仍是门控代理指标，不是生成质量。
+新增 [隔离评测实验室](evaluation-lab.md) 用公开虚构语料比较 sparse 基线与确定性术语扩展，不连接用户索引。
+生成质量和引用语义正确率仍需人工标注，不能从检索指标推导。
 
 ## 9. 当前限制
 
@@ -361,7 +369,7 @@ MCP 不暴露上传、任意路径导入或 reset，避免宿主 Agent 通过协
 - SQLite 适合本地和作品集规模，不代表已经验证高并发写入。
 - PDF 仅做文本抽取，没有扫描件 OCR、版面理解或图片 RAG。
 - DOCX 支持普通段落和表格文本，但不保留复杂样式。
-- 没有文档删除 HTTP/MCP 接口。
+- HTTP 已支持受管资料删除，MCP 仍只读。
 - 没有多租户、RBAC、审计日志和细粒度文档权限过滤。
 - 引用校验验证编号映射，不验证逐句语义支持关系。
 - Web UI 使用节点级 SSE，但它不是 provider token 流。
