@@ -11,7 +11,8 @@ import json
 import re
 import time
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeoutError
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -158,10 +159,7 @@ class ToolRegistry:
                 error_type=type(exc).__name__,
             )
 
-        if isinstance(value, str):
-            rendered = value
-        else:
-            rendered = json.dumps(value, ensure_ascii=False, default=str)
+        rendered = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, default=str)
         if len(rendered) > tool.max_output_chars:
             rendered = rendered[: tool.max_output_chars] + "\n...[tool output truncated]"
         return ToolExecution(
@@ -298,7 +296,7 @@ class BoundedToolAgent:
                     raw_arguments = json.loads(decision.arguments_json or "{}")
                     if not isinstance(raw_arguments, dict):
                         raise ValueError("tool arguments must decode to an object")
-                except (json.JSONDecodeError, ValueError):
+                except ValueError:
                     execution = ToolExecution(
                         tool_name=tool_name,
                         status="invalid_arguments",
