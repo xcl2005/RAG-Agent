@@ -62,6 +62,7 @@ include = [
     "README.md",
     "data/eval/sample_retrieval.jsonl",
     "data/eval/portfolio",
+    "data/tutorial",
     "docs",
     "scripts",
     "src/rag_agent",
