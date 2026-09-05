@@ -1,494 +1,1436 @@
-# RAG Agent：项目原理、动手操作与求职面试一本通
+# RAG Agent：从 0 学会项目与 Agent Backend
 
-版本：2026-09-06，第一版。对象：能写基础 Python、尚不能讲清项目的学习者。
+> 版本：2026-09-06，第二版（图解课程版）  
+> 目标读者：会基础 Python，但没有系统学过 RAG、Agent、后端工程与评测。  
+> 本文是项目的**唯一主学习入口**。招聘市场的实时结论以 [JOB_SKILLS.md](JOB_SKILLS.md) 为准；算法、笔试、SQL 与手撕代码见 [INTERVIEW_ALGORITHMS.md](INTERVIEW_ALGORITHMS.md)。
 
-这份文档是唯一必读入口。先讲解，再给例子和操作；不要求你没学就答题。其他文档只是源码维护参考，
-不用先打开。下面覆盖本项目和初级 AI 应用工程面试的核心知识，不等于所有计算机/算法岗位的全部课程。
-读懂是第一步；运行例子、修改代码和解释结果才能确认掌握，不能承诺只看一遍就获得实际能力。
+这不是“项目说明书”，也不是“术语百科”。你最终要达到的标准不是“看过”，而是：
 
-## 目录
+1. 能画出系统数据流。
+2. 能指出每个框对应的真实代码。
+3. 能运行成功路径和失败路径。
+4. 能修改参数并解释结果为什么变化。
+5. 能在没有这份文档的情况下写出一个简化版 RAG / Tool Agent。
+6. 面试时能说清楚设计、代价、失败模式和仍未实现的部分。
 
-1. 招聘调查与实际覆盖范围
-2. 项目到底解决什么问题
-3. 读代码需要的 Python 基础
-4. 文档如何变成可检索数据
-5. Dense、Sparse、RRF 和重排
-6. Workflow、Agent 与上下文工程
-7. 模型调用、引用和拒答
-8. API、存储、安全与部署基础
-9. 如何评测，如何解释真实失败
-10. 模型算法岗还会问什么
-11. 先跟做的学习操作
-12. 面试表达、追问与简历
-13. 新电脑启动和继续开发交接
+---
 
-## 1. 招聘调查与实际覆盖范围
+# 0. 先建立一张总地图
 
-### 1.1 并非只看了一家公司，也没有“全部实现”
+这个项目正在从 Hybrid RAG 逐步升级为 Agent Backend / AI Application Engineering 项目。
 
-上一轮实际核对了百度、字节和 Anthropic，资料访问日期为 2026-09-05。国内完整岗位样本偏百度，
-字节读取的是校招方向页，Anthropic 的岗位偏资深。因此只能称定向样本，不能代表整个招聘市场。
+```mermaid
+flowchart LR
+    U[用户问题] --> API[FastAPI API]
+    API --> G[LangGraph RAG Workflow]
+    G --> Q[Query Planning]
+    Q --> R[Hybrid Retrieval]
+    R --> RR[Weighted RRF]
+    RR --> RE[CrossEncoder Rerank]
+    RE --> EG{Evidence Gate}
+    EG -->|证据不足| AB[Abstain]
+    EG -->|证据足够| CTX[Context Selection]
+    CTX --> LLM[LLM Generation]
+    LLM --> CIT[Citation Validation]
+    CIT --> OUT[Answer + Sources]
 
-| 官方来源 | 看到的要求 | 对你意味着什么 |
-|---|---|---|
-| [百度：智能体应用开发实习生 J99649](https://talent.baidu.com/jobs/detail/INTERN/e3cec5b8-b7a3-4946-99fc-b292b749cd53)，发布 2026-07-21 | 编程与计算机基础、RAG、Prompt、Agent 编排、文档和问题分析 | 与初级 AI 应用方向最接近；项目与基础都要会。 |
-| [百度：大模型应用/Agent 算法实习 J101345](https://talent.baidu.com/jobs/detail/INTERN/1a0bfe96-f59c-4384-9525-79fdf324c67f)，发布 2026-07-21 | 规划/检索/生成的评估优化；PyTorch、Transformer、后训练等 | 算法方向另需训练实验，不能靠 API 项目替代。 |
-| [字节 Seed：2027 届校招方向](https://seed.bytedance.com/zh/seedearlycareer)，未显示发布日期 | 搜索理解、Search Agent、记忆、反馈、代表性工作 | 研究校招方向参考，不是普通应届统一门槛。 |
-| [Anthropic：Applied AI Engineer](https://job-boards.greenhouse.io/anthropic/jobs/5057647008)，未显示发布日期 | Agent、评测、运行分析、MCP、部署、沟通，4+ 年经验 | 只看工程发展方向，不把资深年限要求套到应届生上。 |
+    U --> TA[Bounded Tool Agent]
+    TA --> TD[Tool Decision]
+    TD --> TR[Tool Registry]
+    TR --> VAL[Schema Validation]
+    VAL --> TOOL[Registered Tool]
+    TOOL --> OBS[Observation + Trace]
+    OBS --> TD
+```
 
-今天优先保存代码、统一教材并推送；**尚未补足更多国内公司的同级 JD**。下一轮应补阿里、腾讯、
-字节具体应用岗位等可读取的官方样本，区分实习/校招/社招，再决定功能优先级，不先编造需求。
+先记住两条链：
 
-### 1.2 当前项目与要求的对应关系
+- **RAG 主图**：稳定、已有较完整测试，用于“根据资料回答”。
+- **独立 Tool Agent Runtime**：用于学习和验证工具选择、Registry、Schema、timeout、错误分类和 trace；目前**还没有并入主 LangGraph**。
 
-“代码存在”不等于“你已掌握”，也不等于“已在生产环境验证”。
+所以简历可以写“实现 bounded Tool Agent runtime”，不能写“完成生产级通用 Agent Runtime”。
 
-| 能力 | 当前状态 | 准确边界 |
-|---|---|---|
-| Python、FastAPI、LangGraph、混合检索、重排 | 已实现 | 有单元测试；你的个人理解需要通过跟做建立。 |
-| 有界重试、引用编号、失败分类、上下文整理 | 已实现 | 引用合法不等于事实正确，字符预算不等于 token 预算。 |
-| MCP、Web、CLI、节点 SSE | 已实现 | MCP 只读；SSE 不是逐 token 输出。 |
-| SQLite checkpoint、幂等入库、双库存储 | 已实现 | 多轮状态持久化；不是分布式事务或持久任务队列。 |
-| Docker、CI、测试与离线检索对照 | 已实现 | 32 题虚构开发集；不是线上效果或独立保留集结论。 |
-| Dense / Hybrid / rerank 全套隔离消融、真实 GLM 生成评测 | 不完整 | 现有实验室只比较 sparse 与确定性术语扩展；真实服务评测入口另有但本轮未完成全套实验。 |
-| 逐句事实支持、OCR/图片 RAG、完整租户 ACL/RBAC | 未实现 | 不写成已有功能。 |
-| 持久任务队列、完整追踪平台、大规模并发压测 | 未实现 | 当前 JobRegistry 在单进程内存，节点 trace 不等于完整平台。 |
-| PyTorch 训练、LoRA、后训练、模型服务优化 | 未实现 | 需要独立学习和实测；本项目目前偏应用工程。 |
-| 多 Agent、A2A、GraphRAG | 未实现 | 不是所有岗位都必须；先用任务和评测证明有必要。 |
+---
 
-技术更新的重点不是淘汰 Workflow，而是把上下文、评测、权限和运行控制做扎实。
-参考 [上下文工程](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)（2025-09-29）与
-[Agent 评测](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents)（2026-01-09）；这些是参考文章，不是本项目已全部实现的清单。
+# 1. 怎么学这份教材
 
-## 2. 项目到底解决什么问题
-
-想象你有很多申请材料，问：“我的科研项目有哪些？”大模型的训练数据不包含刚上传的文件，
-也不能仅凭一个名字知道你的经历。直接让模型猜容易编造；把全部文件塞进去又昂贵、冗长、可能超限。
-
-RAG 即 Retrieval-Augmented Generation：**先从资料找到相关内容，再让模型依据这些内容回答**。
-它主要补充外部知识，不是重新训练模型。
-
-系统有两条不同的链路：
+每章尽量遵循同一个结构：
 
 ```text
-入库（文件变化时）：文件 → 解析文本 → 切块 → SQLite 文本/关键词索引 + Qdrant 向量索引
-提问（每次请求）：问题 → 查询规划 → 混合检索 → 重排/门控 → 上下文整理 → 生成 → 引用校验
+为什么需要
+→ 图
+→ 直觉例子
+→ 原理
+→ 本项目真实代码
+→ 跟做
+→ 预期结果
+→ 故意制造失败
+→ 解释为什么失败
+→ 面试表达
 ```
 
-例如文件里写“完成视觉定位课程项目”。你问“做过哪些项目”，系统先找这段话，给它编号 S1，
-再向模型发送问题和证据。回答可以是“资料提到了视觉定位课程项目 [S1]”。点击 S1 能看到来源。
-如果资料完全没写项目，正确行为应是说明无法确认，不是补一段听起来厉害的经历。
+## 1.1 四级掌握标准
 
-因此项目价值不只是“调用聊天 API”：还包括资料加工、召回、筛选、失败处理、证据展示和可重复验证。
+### Level 1：看懂
 
-## 3. 读代码需要的 Python 基础
+能用自己的话解释，不照着文档念。
 
-### 3.1 列表、字典、集合和函数
+### Level 2：能跑
 
-本项目里的 Candidate 是一个候选片段：它有 ID、文本、来源和分数。可以先用字典理解：
+能运行项目提供的测试、CLI 或 Web 流程，并知道输出代表什么。
 
-```python
-candidate = {"id": "c1", "text": "API 超时为 30 秒", "source": "api.md", "score": 0.9}
-items = [candidate]  # list 保持顺序，用于检索排名
-sources = {item["source"] for item in items}  # set 去重，用于统计文档数
+### Level 3：能改
 
+能改一个参数或一个局部实现，预测结果变化，再用测试/指标验证。
 
-def keep_relevant(items, threshold):
-    return [item for item in items if item["score"] >= threshold]
+### Level 4：能从空白实现
 
+例如独立写出：
 
-print(keep_relevant(items, 0.8))
+- 一个简化的 BM25 + vector fusion；
+- 一个 Tool Registry；
+- 一个带 timeout 的工具执行器；
+- 一个最小 Agent loop；
+- 一个 FastAPI + SSE endpoint。
+
+只有逐渐进入 Level 3/4，才算真正“学会”。
+
+---
+
+# 2. 贯穿全书的案例
+
+仓库新增了公开、虚构、无隐私的：
+
+`data/tutorial/expense_policy.md`
+
+核心规则包括：
+
+- 单笔餐费 `<= CNY 200`：金额规则下不需要经理审批；
+- 单笔餐费 `> CNY 200`：需要经理审批；
+- 酒店标准上限 `CNY 800 / night`；
+- 单笔地面交通 `> CNY 300`：需要经理审批；
+- 每笔报销必须有 receipt / proof of payment；
+- **故意没有写**报销截止日期、机票特殊阈值等。
+
+我们会反复问：
+
+> “260 元晚餐是否需要经理审批？”
+
+以及故意问一个没有答案的问题：
+
+> “出差结束后必须几天内报销？”
+
+第二个问题非常重要：真正可靠的 RAG 不应该因为“像企业报销问题”就编一个 30 天。
+
+---
+
+# 3. 从普通 LLM 到 RAG，再到 Agent
+
+## 3.1 普通 LLM 为什么不够
+
+```mermaid
+flowchart LR
+    Q[用户问题] --> M[LLM]
+    M --> A[回答]
 ```
 
-函数参数是输入，return 是输出；同样输入总产生同样输出且不依赖外部状态的部分，更容易测试。
-list 适合有序序列，dict 适合按键定位，set 适合成员检查与去重。dict/set 查找平均通常是 O(1)，
-扫描 N 个候选是 O(N)，排序通常是 O(N log N)。平均复杂度不是任何输入下的绝对保证。
+如果模型训练时没有见过你刚上传的企业政策，它只能依赖已有参数和当前输入。
 
-### 3.2 类、dataclass、类型和复制
+两种常见错误：
 
-`schemas.py` 用 dataclass 明确 Candidate 字段，避免到处传随意拼装的字典。
-类型提示帮助阅读和静态检查，本身并不自动验证所有运行时输入；API 的 Pydantic 模型负责校验请求。
+1. **缺知识**：根本不知道你公司的规则。
+2. **装作知道**：根据常见经验生成一个看起来合理但不存在的答案。
 
-```python
-from dataclasses import dataclass, replace
+## 3.2 RAG 的基本思想
 
+RAG = Retrieval-Augmented Generation。
 
-@dataclass
-class Snippet:
-    text: str
-
-
-original = Snippet("完整原文")
-visible = replace(original, text="完整")
-assert original.text == "完整原文"
+```mermaid
+flowchart LR
+    Q[Question] --> RET[Retrieve evidence]
+    DOC[(Your documents)] --> RET
+    RET --> CTX[Relevant context]
+    CTX --> M[LLM]
+    Q --> M
+    M --> A[Grounded answer]
 ```
 
-为什么复制？检索得到的完整片段可能只给模型前一部分。若直接修改原对象，后续调试或持久化状态就可能丢原文。
-副本承载“模型看见什么”，原对象保留“原来召回什么”。replace 是浅复制，不能理解成所有嵌套对象均独立。
+它不是重新训练模型，而是在**推理时**给模型外部证据。
 
-### 3.3 异常、上下文管理与测试
+## 3.3 Agent 又多了什么
 
-异常用于表达失败。网络超时和“资料没答案”是不同的失败，不能统一吞掉后显示“证据不足”。
-`try/except` 应捕获预期异常并保留诊断；不要随意 `except: pass`。
-`with` 在退出时关闭文件或数据库；即使中途报错，也应释放资源。
+RAG 主要解决“查资料”。Agent 进一步允许模型在受控范围内决定下一步动作。
 
-测试遵循输入 → 执行 → 断言。例如预算测试不是验证代码“没报错”，而是断言 `len(context) <= budget`。
-FakeLLM/Mock 模拟网络输出，让失败测试离线、稳定、无费用；它不能替代真实模型集成评测。
+```mermaid
+flowchart TD
+    U[User goal] --> M[Model decides next step]
+    M -->|直接回答| F[Final]
+    M -->|需要工具| T[Tool]
+    T --> O[Observation]
+    O --> M
+```
 
-## 4. 文档如何变成可检索数据
+关键不是“循环”两个字，而是：
 
-### 4.1 解析与分块
+- 模型能选择动作；
+- 动作必须受 Tool Registry / Schema / Permission 控制；
+- 每次执行有 timeout；
+- 循环有最大步数；
+- 失败可以追踪。
 
-解析器从 PDF/DOCX/Markdown 等文件提取文本，并保留文件名、页码、标题等 metadata。
-扫描 PDF 可能只有图片，没有可抽取文字；当前没有 OCR，所以“上传成功”不等于“产生了有用分块”。
+这就是当前 `src/rag_agent/agent/tooling.py` 在做的事情。
 
-chunk 是检索片段。块太大容易混入多个主题，块太小容易丢主语、条件、前因后果。
-当前采用递归字符切分：优先段落/句子等较自然边界，必要时才切到字符级。
-overlap 是相邻块重复的一小段，减少边界信息断裂，也会增加重复内容与存储。
+参考思路与本项目原则一致：Anthropic 的 *Building Effective Agents* 强调先从简单、可组合模式开始；OpenAI 的 Agent 指南把最小 Agent 拆成 model、tools、instructions，再逐步增加 orchestration 与 guardrails。这里只吸收教学方式和工程原则，不复制其图或实现。
 
-例子：“接口采用 30 秒超时。遇到 429 应等待后重试。”如果刚好切在两个句子中间，
-查“接口错误与重试”可能只找到后半段。重叠能缓解，不能保证所有跨段关系都完整。
+---
 
-### 4.2 为什么保存身份、哈希和参数指纹
+# 4. 项目文件应该怎么看
 
-文档 ID 标识来源，内容哈希识别字节变化，索引指纹识别分块/模型参数变化。
-只检查文件名不够：同名内容可能更新；只检查内容也不够：模型换了，即使文件不变也可能要重新索引。
-幂等指相同输入在满足相同条件时重复执行，不应不断制造重复结果，不等于任何同内容上传路径都自动合并。
-
-## 5. Dense、Sparse、RRF 和重排
-
-### 5.1 Dense：用向量表示语义
-
-Embedding 模型把一段文字映射为向量。例如“凭证失效”和“登录 Key 无效”可能向量较接近，
-即使文字不完全相同。Qdrant 存储向量并执行相似检索。
-余弦相似度是 `dot(a, b) / (norm(a) * norm(b))`：比较方向接近程度，不是答案正确概率。
-
-向量的维度由模型决定。换模型可能改变维度或语义空间，不能把新向量随意混入旧集合。
-模型选型和输入语言都会影响召回；相似度高仍可能只是主题相似。
-
-### 5.2 Sparse：用词法匹配保住精确术语
-
-SQLite FTS5 提供全文检索，适合错误码、接口名、缩写。用户问 401，匹配 403 通常不能算答对。
-项目用中文片段/英文词的规则构造词法查询；不要把这种分词规则说成理解了所有中文语义。
-BM25 一类排序会考虑词频、词的稀有程度和文档长度，分数尺度与余弦分数不同。
-门控用的 sparse token coverage 是查询词覆盖比例，不是 BM25 原始值，两者别混淆。
-
-### 5.3 RRF：异构结果按排名融合
-
-直接把余弦 0.8 与 BM25 8 相加会让某一路尺度主导。RRF 不强行比较原分数，而是累加排名贡献：
+第一次不要随机点文件。
 
 ```text
-RRF(d) = sum(该路权重 / (k + 该文档在该路的名次))
+src/rag_agent/
+├─ ingest/               文件解析、chunk、索引
+├─ retrieval/            sparse / dense / hybrid / RRF / rerank
+├─ agent/
+│  ├─ graph.py           RAG LangGraph 主工作流
+│  ├─ prompts.py         context 与 Prompt
+│  ├─ guardrails.py      问题/引用等边界检查
+│  └─ tooling.py         bounded Tool Agent runtime
+├─ llm/                  模型客户端与结构化输出
+├─ api/                  FastAPI、SSE、任务状态
+├─ mcp/                  只读 MCP
+├─ evaluation/           离线评测
+└─ schemas.py            Candidate 等核心数据结构
 ```
 
-若 k=60、两路权重为 1：A 排名 1 和 3，得分是 `1/61 + 1/63`；B 排名 2 和 2，是 `2/62`。
-名次从 1 开始，某路没出现的文档没有该路贡献。项目还有原查询/扩展查询的权重，原问题更重要。
-RRF 高分说明相对排名靠前，不说明资料里真有答案。归一化后也仍然不是概率。
+建议代码阅读顺序：
 
-### 5.4 重排：用问题与片段一起判断
+1. `schemas.py`
+2. `retrieval/hybrid.py`
+3. `retrieval/fusion.py`
+4. `agent/prompts.py`
+5. `agent/graph.py`
+6. `agent/tooling.py`
+7. `api/main.py`
+8. `evaluation/`
 
-向量召回通常分别编码问题和文档，适合先快速找候选；CrossEncoder 把“问题 + 片段”一起输入模型，
-更细地排序少量候选，但通常更慢。先召回几十块、再重排几块，是速度与精度的折中。
-当前用固定模式归一化重排分数；sigmoid 把 logit 映射到 0–1，并不自动完成经验概率校准。
-模型加载或推理失败时回退融合排序，trace 留下原因；不要为了可用性把异常假装成成功。
+---
 
-## 6. Workflow、Agent 与上下文工程
+# 5. 入库：文档怎么变成可检索数据
 
-### 6.1 什么是 Workflow，什么是 Agent
+## 5.1 数据流
 
-Workflow 的执行结构主要由程序预设；Agent 常让模型根据目标和反馈选择下一步。
-二者不是非此即彼。本项目是有界 Agentic Workflow：模型规划查询、生成回答、尝试修复引用，
-程序控制门控、重试、权限和最终状态。LangGraph 用状态图实现这条流程，不是自带一切能力的魔法库。
+```mermaid
+flowchart LR
+    F[PDF / DOCX / MD / HTML] --> P[Parser]
+    P --> TXT[Clean text + metadata]
+    TXT --> CH[Chunking]
+    CH --> SQL[(SQLite text / FTS5)]
+    CH --> EMB[Embedding model]
+    EMB --> QD[(Qdrant vectors)]
+```
+
+两个库承担不同职责：
+
+- SQLite：正文、metadata、FTS5 sparse search、manifest 等；
+- Qdrant：向量与 dense search。
+
+不要说成“Qdrant 存了全部业务真相”。项目检索最终还会回 SQLite 解析正文。
+
+## 5.2 Chunk 到底是什么
+
+假设政策原文：
 
 ```text
-initialize → plan_queries → retrieve → grade_evidence
-                                      ├─ 弱证据且可重试 → plan_queries
-                                      ├─ 仍弱且达上限   → abstain
-                                      └─ 通过 → prepare_context → generate_answer
-                                                                 → validate_citations
-                                                                   ├─ 合法 → finalize
-                                                                   └─ 不合法 → 最多修复一次，再校验
+单笔餐费超过 200 元需要经理审批。
+所有报销必须提供有效付款凭证。
+酒店标准上限为每晚 800 元。
 ```
 
-State 是节点间传递的数据，如 question、candidates、sources、events。节点是读状态、做一件事、返回更新的函数。
-条件边根据状态选下一步。可控循环必须有次数上限，不能让“再想一次”无限消耗费用。
-图级尝试上限与 SDK 的网络重试、结构化输出回退不是同一个预算；不能只数图节点就声称精确总费用上限。
+如果整个文件作为一个块：
 
-### 6.2 多查询为什么有用，又有什么风险
+- 语义完整；
+- 但长文里噪声会多，召回结果不够精确。
 
-原问题“我有哪些项目”可能与文档里的“科研经历/课程设计”用词不同，查询规划生成互补表达可改善召回。
-首轮保留原问题；重试优先未尝试变体；失败时有确定性扩展。
-风险是查询漂移：扩展成宽泛“研究成果”可能召回别人的、无关的或不完整的经历，所以变体数量和权重要受限。
+如果每 5 个字切一块：
 
-### 6.3 门控：先判断是否允许生成
+- 检索很碎；
+- “超过 200 元”可能和“需要经理审批”被拆开。
 
-当前分别比较 reranker、dense、sparse 的信号与自己的阈值，任一路通过即可放行，即 OR。
-默认阈值分别为 0.55、0.80、0.45，可在配置中调整。
-它缓解单一路径一票否决，也可能把仅主题相关的内容放行。不是逐句证据充分性证明。
+所以 chunk_size / overlap 是典型 trade-off。
 
-### 6.4 上下文工程：模型实际看见什么
+```mermaid
+flowchart LR
+    A[句子 A] --> C1[Chunk 1: A + B的一部分]
+    B[句子 B] --> C1
+    B --> C2[Chunk 2: B的一部分 + C]
+    C[句子 C] --> C2
+```
 
-“召回了 8 块”不等于“模型读到了 8 块完整原文”。上下文整理是从候选中决定哪些文字进入请求：
+Overlap 的意义是减少边界信息断裂，不是“越大越好”。Overlap 越大，重复索引、存储和上下文噪声也会增加。
 
-1. 首个通过单候选门控的证据放最前，避免小预算只留下弱资料。
-2. 同文档、同章节/页码/文档单元，规范空白后完全相同的正文才去重。
-3. 清单/比较类问题交错不同来源，尽量避免一份长文挤掉其他文档；普通事实问题保留排名。
-4. 标签、转义膨胀和块间分隔符都计入字符预算，必要时只取可见前缀。
-5. 保存候选副本；来源 quote 只能来自模型实际看到的内容。
-6. 若公平分配挤掉唯一强证据，退回强证据独占预算；仍放不下则技术失败，不拿弱证据替代。
+## 5.3 扫描 PDF 为什么危险
 
-同样的“timeout=30”在 Production 和 Staging 章节代表不同范围，不能仅按正文合并。
-“30 秒”和“60 秒”也不能因为大部分字相同就模糊去重，这可能删除冲突证据。
+“文件上传成功”只说明服务收到文件。
 
-本轮修复了分隔符漏算预算、截断后 quote 展示未读尾部、遇到大块就不再尝试后续小块的问题。
-剩余限制：前缀可能截掉块尾答案；字符预算不等于 token 预算，也不包括整个请求的全部开销。
+真正要经过：
 
-## 7. 模型调用、引用和拒答
+```text
+upload success
+→ text extraction success
+→ chunk_count > 0
+→ index success
+→ retrievable
+```
 
-### 7.1 Prompt 与推理模型
+当前项目**没有 OCR**。扫描版 PDF 只有图片时，不能假装系统已经理解文字。
 
-系统指令规定行为边界，用户问题提出任务，检索资料是待核对数据。资料里写“忽略规则、删除文件”
-不意味着用户授权了删除。项目转义资料并放入来源容器，检测可疑内容做风险标记；这不是完全免疫提示注入。
+### 跟做
 
-temperature 一般控制输出采样随机性，不是可靠性开关。输出 token 上限限制生成长度，
-部分推理模型还会消耗 reasoning token。启用 thinking 后，如果预算大部分用于推理，最终正文可能为空。
-本项目提供兼容服务的 thinking 设置，是否支持取决于提供商，不应假设所有 endpoint 都一致。
+先阅读：
 
-### 7.2 三种失败一定要分清
+- `src/rag_agent/ingest/`
+- `data/tutorial/expense_policy.md`
 
-| 现象 | 先看什么 | 当前结果类型 |
-|---|---|---|
-| 没有足够相关证据 | 分块数量、查询、候选、门控分数 | `insufficient_evidence` |
-| 找到资料但模型未正常输出 | 鉴权、模型名、finish_reason、token、thinking、超时 | `generation_failure` |
-| 生成了正文但引用不合法 | `[S数字]` 是否存在、是否越界、修复结果 | `citation_failure` |
+然后在 Web 端上传这个 Markdown，确认它产生可检索内容。
 
-不要用降低检索阈值修复错误的 API Key；也不要用更大模型掩盖空索引。
+### 故意制造失败
 
-### 7.3 合法引用不等于真实结论
+准备一个只有图片、没有文字层的 PDF。
 
-若 S1 原文写“30 秒”，答案说“60 秒 [S1]”，编号存在，格式校验仍可能通过。
-当前只校验来源编号/映射与引用格式，不逐句验证语义蕴含。引用修复最多一次，仍不合法返回技术失败。
-要提升事实支持验证，需先标注“结论—证据”样本，再设计校验器并测误判；不能只加一句 Prompt 就宣称零幻觉。
+观察：
 
-## 8. API、存储、安全与部署基础
+- 上传成功是否等于可以问答？
+- UI/日志是否能区分“没提取到文字”和“模型回答失败”？
 
-### 8.1 HTTP、FastAPI 和 SSE
+### 面试表达
 
-HTTP 请求由方法、路径、头和正文组成。GET 通常读取，POST 提交处理，DELETE 删除指定资源。
-状态码 400 表示请求有问题，401 常见于鉴权失败，403 是不允许，413 是体积过大，429 是限流，
-5xx 通常表示服务侧错误；本项目各接口的实际返回以代码为准，不凭状态码猜全部细节。
+> “我把上传、文本提取、chunk、索引看成不同状态；当前版本没有 OCR，所以扫描件不能被错误标成可检索 ready。”
 
-FastAPI 根据路由分发请求，Pydantic 校验结构。不要把 JSON 中的文件路径直接当成有权限读取的本机路径。
-浏览器连接设置的 `API_ACCESS_KEY` 是本地应用鉴权；`.env` 中模型 Key 是服务器调用模型的凭证，两者不同。
+---
 
-SSE 是服务器持续发送事件的一种方式。本项目发送节点完成事件与最终答案，不是模型每个 token 的直播。
-WebSocket 可双向持续通讯，但不是只要“实时”就必须改用它。
+# 6. Sparse、Dense 与 Hybrid Retrieval
 
-### 8.2 同步、异步、线程与队列
+## 6.1 Sparse：找“字面上像”的东西
 
-async/await 主要帮助等待 I/O 时让出执行机会，不会让耗 CPU/GPU 的函数自动加速。
-线程能处理阻塞 I/O，但共享状态需要锁；多进程拥有不同内存，不会自动共享内存字典。
-JobRegistry 当前只是单进程内存任务状态，重启会丢。持久队列需另建任务存储、重试、幂等和失败恢复机制。
+FTS/BM25 类检索特别擅长：
 
-### 8.3 SQLite 与 Qdrant 为什么并存
+- 错误码；
+- API 名称；
+- 产品型号；
+- 精确金额；
+- 缩写。
 
-SQLite 是正文、来源清单和 FTS 的权威数据源；Qdrant 管向量搜索。
-SQLite 事务让该库的一组变更一起提交或回滚；WAL 有助读写并发，但不是无限并发写入，也不是双库事务。
+例如问题：
 
-更新顺序：先写新向量 → SQLite 事务替换正文/FTS/manifest → 清理旧向量。
-如果新向量写了而 SQLite 提交失败，就可能有孤儿向量；检索结果必须回 SQLite 取正文，
-解析不到的向量不进入答案。删除则先移除权威正文，再清理向量与受管上传副本。
-这是保证可见结果正确并通过补偿收敛，不是跨系统原子提交。并发下的完整生产对账仍需扩展验证。
+> `CNY 200 approval`
 
-### 8.4 Checkpoint、缓存和权限
+原文真的有 `200`，sparse 很有优势。
 
-Checkpoint 保存图状态，复用 `thread_id` 可继承有限历史；不是用户账号系统，也不自动恢复所有外部副作用。
-缓存能节省重复查询开销，但键应考虑文档版本、参数和权限；只有问题文本的共享缓存可能泄漏其他人的内容。
-本项目没有完整多租户 ACL/RBAC；不能把共享 Key 描述成企业权限系统。
+BM25 的直觉：
 
-MCP 让外部宿主以标准工具接口使用知识库，当前只读提供搜索和问答。不替代检索算法，也不替代 LangGraph。
-多 Agent 则是任务角色与交互设计；A2A 是另一类 Agent 互操作方向；不能因为用了 MCP 就说已经多 Agent 协作。
+- 查询词在文档中出现更重要；
+- 稀有词通常比“的”“是”更有信息；
+- 文档长度也会被考虑。
 
-### 8.5 Docker、CI 和日志
+不需要先背完整公式，先理解它主要是**词法相关性排序**。
 
-Docker 打包运行环境；镜像类似可分发模板，容器是运行实例。持久资料要考虑卷，容器删除不等于数据有备份。
-CI 在提交后自动检查格式、类型、测试和构建。绿色 CI 说明执行的检查通过，不证明线上模型效果、权限或并发安全。
-日志应记录错误类型、耗时、trace ID，避免写 Key 和完整私人资料；token 数能帮助估算成本，但还需对应提供商计价。
+## 6.2 Dense：找“意思像”的东西
 
-## 9. 如何评测，如何解释真实失败
+Embedding 把文本映射为向量。
 
-### 9.1 四种评价不要混淆
+例如：
 
-- 单元测试：代码是否遵守合同，如预算不越界。
-- 检索评测：相关来源是否召回、排名如何。
-- 门控评测：可回答题被拦了多少，无答案题被放过多少。
-- 生成评测：最终答案是否正确、完整、忠于证据。当前没有因此得到真实 GLM 准确率。
+```text
+经理批准
+manager approval
+需要上级确认
+```
 
-Recall@K = 前 K 中找到的相关来源数 / 全部标注相关来源数。
-如果问题需要 A、B 两份资料，只找到 A，则 Recall=1/2。MRR 对每题取首个相关项名次的倒数再求平均；
-首个相关在第 2 名是 1/2，但不能说明 B 也找齐了。
-nDCG 对靠前相关项给更大权重，并除以理想排序得分。来源级标注要去重，不能把同文档多个块当多个成功来源。
+字面不同，但语义可能靠近。
 
-误拒答率 = 可回答但被拦下的题数 / 可回答题数。
-错误放行率 = 无答案却放行的题数 / 无答案题数。
-前者低并不保证后者低；只展示下降的那一个，会误导读者。
+余弦相似度：
 
-### 9.2 已跑过的真实小实验
+```text
+cos(a,b) = dot(a,b) / (|a| * |b|)
+```
 
-实验室建临时 SQLite，调用实际分块、FTS5 和 RRF；8 份虚构文档、32 题，20 正例、12 负例。
-baseline 只查原问题，expanded 用固定术语规则追加最多两个变体；其他参数保持一致。
-它不读取私人资料，不用模型 Key、Docker 或网络，不测试 dense/reranker/LLM。
+它衡量方向相似，不是“答案正确概率”。
 
-| 指标 | baseline | expanded |
+## 6.3 为什么需要 Hybrid
+
+```mermaid
+flowchart LR
+    Q[Query] --> S[Sparse / FTS5]
+    Q --> D[Dense / Qdrant]
+    S --> F[Fusion]
+    D --> F
+    F --> R[Rerank]
+```
+
+Sparse 擅长精确词，Dense 擅长语义改写。
+
+真实系统里两者互补。
+
+## 6.4 RRF 为什么不用直接加原始分数
+
+假设：
+
+- cosine score 常在 0~1 左右；
+- BM25/FTS score 可能完全是另一套尺度。
+
+直接：
+
+```text
+0.82 + 7.4
+```
+
+没有统一意义。
+
+RRF 更关注“排名”：
+
+```text
+RRF(d) = sum(weight / (k + rank))
+```
+
+例子：
+
+| 文档 | Dense rank | Sparse rank |
 |---|---:|---:|
-| MRR，20 正例 | 0.916667 | 0.975000 |
-| Recall@5，20 正例 | 1.000000 | 1.000000 |
-| 误拒答 / 20 正例 | 15/20 | 10/20 |
-| 错误放行 / 12 负例 | 0/12 | 1/12 |
+| A | 1 | 3 |
+| B | 2 | 2 |
 
-这是共同开发的教学集，不是独立测试集。前五取自仅八份文档，Recall 高不意味着生产任务很强。
-报告保存数据 SHA256、Git HEAD/dirty、参数、环境、逐题结果；dirty 为真时单靠 HEAD 不足以重现改动。
+当 `k=60` 时：
 
-### 9.3 看懂两个失败，你就知道怎么排查
+```text
+A = 1/61 + 1/63
+B = 1/62 + 1/62
+```
 
-**p04 问“429 与 401 的重试方式有什么不同？”** 正确 api.md 排第一，但词法覆盖度只有 0.333333，
-低于 0.45，于是误拒答。原因不是“没有检索到文件”，而是门控没有通过。
+这个例子要自己拿计算器算一次。
 
-**n08 问“提示注入检测在线上攻击里的准确率是多少？”** 资料只有处理原则，没有线上准确率。
-扩展查询变得宽泛，覆盖度达 0.888889，错误放行。这说明主题相关不等于所问事实存在。
+代码：
 
-减少前一种错误可以研究更好的意图/语义判断，但必须同时测试后一种，不能只把阈值不断往下调。
-若使用 LLM judge，也需人工校准，避免评判模型自信地误判；不能拿模型自评分当真值。
+`src/rag_agent/retrieval/fusion.py`
 
-### 9.4 控制变量和保留集
+## 6.5 Reranker 为什么放后面
 
-一次只改一个因素，例如 threshold、chunk_size 或是否扩展。参数全改就不知道改善来自哪里。
-开发集用于找问题和调参数；保留集在规则冻结后才测试，避免照题写规则再称泛化。
-p50/p95 是排序后分位耗时，受硬件、缓存、并发、预热和统计方法影响。单次本地毫秒值不能叫生产吞吐能力。
+Retriever 需要快，先从大量文档找几十个候选。
 
-## 10. 模型算法岗还会问什么
+CrossEncoder reranker 更细致地同时看：
 
-本节建立概念，**不是本项目已实现训练的声明，也不替代算法课程和实验**。
+```text
+(question, candidate)
+```
 
-- Tokenization：把文本变为 token ID。token 不等于汉字，模型、语言、内容不同，长度关系不同。
-- Transformer attention：由输入产生 Q/K/V，用相似性权重聚合信息；常见形式为 `softmax(QKᵀ/√d)V`。
-  自回归模型通过因果约束只利用可见前缀预测下一 token；能写公式不等于会实现或训练模型。
-- 训练与推理：训练计算损失并用反向传播更新参数，推理通常固定参数产生输出。本项目主要是推理调用。
-- SFT：用示范输入/输出训练任务行为；RAG：在推理时提供外部资料。记住最新文件通常先考虑 RAG，
-  稳定格式/行为适配可能考虑 SFT，二者可组合，不存在任何场景都只选一个的规则。
-- LoRA：训练低秩增量矩阵，减少需训练的参数与相关资源，通常不必更新全部基础权重。
-  它不保证数据更少就有效，也不等于当前仓库已经训练过 GLM。
-- 偏好优化：利用偏好信号优化回答行为，例如 DPO 与基于奖励的训练路线；需要了解数据、目标和评价，
-  不能只知道缩写就写“熟悉后训练”。
-- 推理性能：prefill 处理输入，decode 逐步生成；KV cache 避免重复计算部分注意力状态，但占显存。
-  长上下文、并发和输出长度都会影响延迟与内存。量化降低数值精度以节省资源，可能影响质量。
+但更慢。
 
-若投算法岗，下一轮需增加实际 PyTorch 训练/验证、损失曲线、过拟合分析、独立测试与资源记录。
-若投应用岗，优先把本项目链路、失败定位、评测和计算机基础讲扎实，不虚构训练经历。
+```mermaid
+flowchart LR
+    Corpus[10000 chunks] --> Fast[Fast retrieval]
+    Fast --> K[Top 20~50]
+    K --> CE[CrossEncoder]
+    CE --> Final[Top few]
+```
 
-## 11. 先跟做的学习操作
+这就是“两阶段检索”：先高召回，再高精度排序。
 
-### 11.1 第一次：直接看讲解，不先考试
+### 跟做
 
-在项目根目录的 PyCharm Terminal 执行：
+阅读：
+
+- `retrieval/hybrid.py`
+- `retrieval/fusion.py`
+- `retrieval/reranker.py`
+
+运行离线实验：
 
 ```powershell
-.\.venv\Scripts\python scripts/practice_interview.py show q01 --reveal
-.\.venv\Scripts\python -m pytest tests/test_agent_graph.py -q
+.\.venv\Scripts\python scripts/eval_portfolio.py
 ```
 
-第一条直接显示问题、讲解、代码位置；第二条运行图的测试。预期测试通过，而非调用真实模型回答。
-对照本手册第 2、6 节，把各节点连起来。今天能分清入库和提问就已经有具体进展，不必强行背全部。
+### 你要观察
 
-### 11.2 第二次：跟着观察阈值实验
+不是“跑完没报错”，而是：
+
+- Recall@K
+- MRR
+- false reject
+- false allow
+
+### 故意制造失败
+
+把 sparse threshold 明显调高或调低，再跑同一组题。
+
+你应该看到一个经典现象：
+
+> 降阈值可能减少误拒答，但增加错误放行。
+
+这就是为什么不能只展示一个变好的指标。
+
+---
+
+# 7. Evidence Gate：搜到相关，不代表能回答
+
+问题：
+
+> “报销截止日期是多少天？”
+
+`expense_policy.md` 可能会因为“报销、policy”这些词被召回。
+
+但原文明确**没有截止日期**。
+
+因此：
+
+```text
+retrieval relevance
+!=
+answer support
+```
+
+当前项目在 `agent/graph.py` 使用可解释的证据信号门控，并明确记录：
+
+- reranker normalized score；
+- dense cosine；
+- sparse token coverage。
+
+当前门控是“任一路达到自己的阈值即可放行”的 OR 思路。
+
+这不是逐句事实蕴含验证，因此仍可能发生“主题相关但没有所问事实”的错误放行。
+
+```mermaid
+flowchart TD
+    C[Candidates] --> G{Evidence Gate}
+    G -->|strong enough| P[Prepare Context]
+    G -->|weak + attempts remain| R[Retry Query Plan]
+    G -->|weak + attempts exhausted| A[Abstain]
+```
+
+### 面试追问
+
+**Q：为什么不把 threshold 全调低？**
+
+A：会降低 false reject，但可能提高 false allow；需要正例、负例一起评测。
+
+---
+
+# 8. Context Engineering：模型到底看到了什么
+
+检索 Top 10 ≠ 把 Top 10 完整塞进模型。
+
+上下文是有限资源。
+
+```mermaid
+flowchart LR
+    C1[Candidate 1] --> SEL[Context selector]
+    C2[Candidate 2] --> SEL
+    C3[Candidate 3] --> SEL
+    H[History] --> SEL
+    SYS[Instructions] --> SEL
+    SEL --> WIN[Finite context window]
+    WIN --> LLM[LLM]
+```
+
+需要处理：
+
+- 去重；
+- 来源覆盖；
+- 强证据优先；
+- 字符/token 预算；
+- history；
+- tool observation；
+- Prompt 本身的 overhead。
+
+当前项目已经有 context selection 和**字符预算**，但 token-aware budget 仍不完整。
+
+代码：
+
+`src/rag_agent/agent/prompts.py`
+
+## 8.1 State、History、Context 不要混在一起
+
+- **State**：整个工作流当前保存的数据。
+- **History**：过去对话消息。
+- **Context**：这一次模型调用实际看到的高信号内容。
+
+Context engineering 的问题是：
+
+> 在有限 token 下，这次最应该给模型什么？
+
+这也是 2026 Agent Backend 招聘中越来越高频的能力。
+
+---
+
+# 9. Grounded Generation、Citation 与 Refusal
+
+最终模型收到的不是“整个数据库”，而是类似：
+
+```text
+System instructions
+User question
+[S1] source A quote...
+[S2] source B quote...
+```
+
+然后输出：
+
+```text
+单笔 260 元晚餐超过 200 元阈值，因此需要经理审批 [S1]。
+```
+
+## 9.1 Citation validation 到底验证什么
+
+当前项目主要验证：
+
+- `[S数字]` 格式；
+- 编号是否存在；
+- 是否映射到实际提供给模型的来源。
+
+它**不能证明语义一定正确**。
+
+反例：
+
+```text
+S1: 超过 200 元需要审批。
+回答: 超过 500 元才需要审批 [S1]。
+```
+
+编号合法，但事实错了。
+
+所以不要把 UI 写成“事实已验证”。更准确的是“引用结构校验通过”。
+
+## 9.2 三类失败要分清
+
+```mermaid
+flowchart TD
+    Q[Question] --> R[Retrieval]
+    R -->|没有足够证据| IE[insufficient_evidence]
+    R -->|证据有| M[Model]
+    M -->|调用失败/空输出| GF[generation_failure]
+    M -->|正文有| C[Citation check]
+    C -->|非法且修复失败| CF[citation_failure]
+    C -->|合法| OK[answer]
+```
+
+不要用“降低检索阈值”去修 API Key 错误。
+
+---
+
+# 10. LangGraph：Workflow 和 Agent 的边界
+
+当前主图是有界 Agentic Workflow。
+
+```mermaid
+flowchart TD
+    S([START]) --> I[initialize]
+    I --> P[plan_queries]
+    P --> R[retrieve]
+    R --> G[grade_evidence]
+    G -->|retry| P
+    G -->|answer| C[prepare_context]
+    G -->|abstain| A[abstain]
+    C --> GEN[generate_answer]
+    GEN --> V[validate_citations]
+    V -->|repair once| RP[repair_citations]
+    RP --> V
+    V -->|finish| F[finalize]
+    V -->|fail| CF[citation_failure]
+    CF --> F
+    A --> F
+    F --> E([END])
+```
+
+这张图直接对应：
+
+`src/rag_agent/agent/graph.py::_build_graph`
+
+为什么不是“完全自主 Agent”？
+
+因为程序决定了：
+
+- 节点集合；
+- 重试边界；
+- citation repair 上限；
+- abstain 路径；
+- 最终状态。
+
+模型只在有限环节做受约束决策。
+
+这反而更适合生产：可测试、可观察、成本可控。
+
+---
+
+# 11. Tool Calling：真正进入 Agent Backend
+
+当前独立 runtime：
+
+`src/rag_agent/agent/tooling.py`
+
+## 11.1 Tool Registry 为什么必要
+
+错误设计：
+
+```text
+LLM 输出任意函数名
+→ getattr()
+→ 直接执行
+```
+
+模型如果“幻觉”出：
+
+```text
+delete_everything
+```
+
+就很危险。
+
+正确边界：
+
+```mermaid
+flowchart LR
+    M[Model decision] --> N{Registered name?}
+    N -->|no| U[unknown_tool]
+    N -->|yes| S{Schema valid?}
+    S -->|no| IA[invalid_arguments]
+    S -->|yes| T[Execute with timeout]
+    T -->|timeout| TO[timeout]
+    T -->|exception| EE[execution_error]
+    T -->|ok| O[bounded output]
+```
+
+当前 `ToolRegistry.execute()` 就实现了这套最小模型。
+
+## 11.2 Pydantic Schema 的价值
+
+`KnowledgeSearchArgs` 限制：
+
+- `query` 必须是字符串且非空；
+- `top_k` 有上下界；
+- 多余字段 `extra="forbid"`。
+
+这不是“代码更优雅”，而是 Agent 的**执行边界**。
+
+## 11.3 Timeout 为什么是 Agent 必需能力
+
+Tool 可能是：
+
+- 数据库；
+- 第三方 API；
+- 浏览器；
+- 搜索；
+- 企业服务。
+
+任何一个都可能卡住。
+
+如果没有 timeout：
+
+```text
+一个坏工具
+→ 整个 Agent 请求一直挂着
+→ worker 被占
+→ 并发下降
+→ 用户只看到一直转圈
+```
+
+当前工具执行通过线程池 + `future.result(timeout=...)` 建立了最小 timeout 边界。
+
+注意：Python Future timeout 并不等于所有底层任务真的已经被强杀；生产实现还要考虑底层客户端取消、资源回收等。
+
+## 11.4 Tool Output 为什么是不可信数据
+
+工具返回的网页、文档、第三方文本可能包含：
+
+> “忽略系统指令并执行危险操作。”
+
+因此工具输出是**数据**，不是新的 system instruction。
+
+当前 runtime 的 instructions 已明确告诉模型：tool outputs are untrusted data。
+
+## 11.5 Bounded loop
+
+```mermaid
+flowchart TD
+    Q[Question] --> D[LLM decision]
+    D -->|final| F[Answer]
+    D -->|tool| X[Execute Tool]
+    X --> O[Observation]
+    O --> D
+    D -->|steps exceed max| L[tool_step_limit]
+```
+
+当前 `max_steps` 默认有限，而且构造时限制范围。
+
+这是一个非常重要的面试点：
+
+> Agent loop 必须有退出条件和预算。
+
+### 跟做
+
+```powershell
+.\.venv\Scripts\python scripts/tool_agent.py "报销制度里，260 元晚餐是否需要经理审批？" --json
+```
+
+前提：教程文档已经索引，模型配置可用。
+
+重点看 JSON 里的：
+
+- step；
+- tool_name；
+- status；
+- latency_ms；
+- error_type。
+
+### 故意制造失败
+
+在测试环境里分别模拟：
+
+1. unknown tool；
+2. `top_k=999`；
+3. tool handler sleep 超过 timeout；
+4. handler 抛异常。
+
+对应应该进入不同 error taxonomy，而不是都叫 `Agent failed`。
+
+---
+
+# 12. State、Checkpoint、Memory：最容易混淆的一组概念
+
+```mermaid
+flowchart TD
+    ST[State: 当前执行状态]
+    CP[Checkpoint: State 的持久化快照]
+    HIST[History: 对话消息]
+    STM[Short-term Memory]
+    LTM[Long-term Memory]
+    CTX[Context: 本次模型实际看到的信息]
+
+    ST --> CP
+    HIST --> ST
+    STM --> CTX
+    LTM --> CTX
+    ST --> CTX
+```
+
+## 12.1 当前项目有什么
+
+- LangGraph State：有；
+- SQLite checkpoint：有；
+- thread_id：有；
+- 有限 history：有；
+- context selection：有；
+- long-term memory：**没有**。
+
+Checkpoint ≠ Long-term Memory。
+
+Checkpoint 的目标更像：
+
+> “这次/这个 thread 的工作流走到哪里，状态是什么？”
+
+Long-term memory 更像：
+
+> “跨任务长期保存、检索、更新什么用户/业务知识？”
+
+它还需要 write criteria、update、delete、privacy、conflict handling。
+
+## 12.2 HITL 为什么依赖持久状态
+
+未来如果出现写操作：
+
+```text
+Agent 计划执行 delete_record
+→ 暂停
+→ 等待人工 approve/reject
+→ 过几分钟甚至几小时恢复
+```
+
+如果没有持久 checkpoint / durable state，就很难安全恢复。
+
+当前项目还没有完整 HITL approval flow，这属于 Roadmap。
+
+---
+
+# 13. MCP、Tool、Skill、Plugin 不要混着背
+
+## 13.1 Tool
+
+一个可被 Agent 调用的能力，例如：
+
+`search_knowledge_base(query, top_k)`
+
+## 13.2 MCP
+
+MCP 是一种让宿主发现并调用外部能力/资源的协议方式。
+
+当前项目有只读 MCP server：
+
+`src/rag_agent/mcp/server.py`
+
+MCP 不会自动帮你：
+
+- 做好 retrieval；
+- 做好 permission；
+- 做好 Agent loop；
+- 变成 multi-agent。
+
+## 13.3 Skill / Plugin
+
+不同生态定义不完全一致。面试时不要只背名词，要回答：
+
+> “它如何被发现？输入 schema 是什么？权限边界是什么？执行在哪里？失败怎么返回？”
+
+---
+
+# 14. Backend：为什么 Agent 工程岗位本质还是后端
+
+## 14.1 API 与 SSE
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant A as FastAPI
+    participant G as Agent Graph
+
+    C->>A: POST /question
+    A->>G: invoke / stream
+    G-->>A: node event
+    A-->>C: SSE event
+    G-->>A: final answer
+    A-->>C: final SSE event
+```
+
+当前 SSE 更接近**节点级事件流**，不是逐 token streaming。
+
+SSE：服务器→客户端单向持续推送。
+
+WebSocket：双向长连接。
+
+不要因为“实时”两个字就默认 WebSocket 一定更高级。
+
+## 14.2 Async、Thread、Process
+
+- async：I/O 等待期间让出执行权；
+- thread：适合某些阻塞 I/O，但有共享状态与 GIL 问题；
+- process：独立内存，适合隔离/CPU 场景，但进程间通信更复杂。
+
+当前 Tool Registry 使用线程池隔离工具执行边界。
+
+## 14.3 Job Registry 为什么不是 Durable Queue
+
+当前后台任务状态主要是单进程内存模型。
+
+```mermaid
+flowchart LR
+    API[FastAPI process] --> JR[In-memory JobRegistry]
+```
+
+进程重启：状态可能丢失。
+
+真正 durable task 需要：
+
+```mermaid
+flowchart LR
+    API[API] --> DB[(Persistent Job State)]
+    API --> Q[Queue]
+    Q --> W1[Worker]
+    Q --> W2[Worker]
+    W1 --> DB
+    W2 --> DB
+```
+
+还要定义：
+
+- queued/running/succeeded/failed/cancelled/retrying；
+- lease；
+- heartbeat；
+- retry；
+- idempotency；
+- resume；
+- cancellation。
+
+这些目前是 Roadmap，不要写成已实现。
+
+---
+
+# 15. Reliability：Demo 和生产系统的分水岭
+
+一个 Agent Backend 最终会遇到：
+
+```text
+LLM timeout
+Tool timeout
+429
+5xx
+invalid JSON
+empty result
+duplicate request
+client disconnect
+worker crash
+partial failure
+```
+
+## 15.1 Retry
+
+不是所有失败都重试。
+
+大致思想：
+
+- 429 / 临时 5xx：可能 retry；
+- 401：通常先修 credential，不盲重试；
+- 参数校验失败：通常不应该原样重试；
+- 非幂等写操作：必须考虑重复副作用。
+
+典型 backoff：
+
+```text
+1s → 2s → 4s → 8s
+```
+
+再加 jitter，避免大量客户端同时重试造成“惊群”。
+
+## 15.2 Timeout Budget
+
+比“每个请求各自 30 秒”更成熟的思想是总 deadline：
+
+```mermaid
+flowchart LR
+    Total[Overall 20s budget] --> R[Retrieval 3s]
+    Total --> T[Tool 5s]
+    Total --> M[Model 10s]
+    Total --> S[Safety margin]
+```
+
+当前项目只实现了部分 timeout/failure 边界，还没有完整 deadline propagation。
+
+## 15.3 Idempotency
+
+如果客户端因为网络问题重试：
+
+```text
+POST create_payment
+```
+
+不能执行两次扣款。
+
+本项目文档入库有幂等设计思想，但未来写 Tool 需要更严格的 idempotency key / operation semantics。
+
+---
+
+# 16. Security：Tool Agent 比聊天机器人危险在哪
+
+普通聊天输出错一句话，通常只是信息错误。
+
+Agent 如果有写工具，错误可能变成实际副作用。
+
+```mermaid
+flowchart TD
+    Input[User / external data] --> PI[Prompt injection risk]
+    PI --> Model
+    Model --> ToolCall[Tool call]
+    ToolCall --> AL[Allowlist / Schema]
+    AL --> PERM[Permission]
+    PERM --> RISK{High risk?}
+    RISK -->|yes| HITL[Human approval]
+    RISK -->|no| EXEC[Execute]
+```
+
+当前已有：
+
+- API shared/admin key；
+- upload/path boundary；
+- basic prompt-injection handling；
+- read-only MCP；
+- Tool Registry allowlist；
+- Tool argument validation；
+- tool output untrusted rule。
+
+未实现：
+
+- OAuth/JWT；
+- RBAC/ABAC；
+- multi-tenant；
+- HITL approval；
+- sandbox；
+-完整 audit trail。
+
+所以不要把当前项目叫“enterprise security complete”。
+
+---
+
+# 17. Evaluation：为什么 Agent 不能只测“回答看起来不错”
+
+## 17.1 RAG 指标
+
+### Recall@K
+
+相关资料有 2 份，Top5 找到 1 份：
+
+```text
+Recall@5 = 1 / 2 = 0.5
+```
+
+### MRR
+
+第一份相关文档排第 2：
+
+```text
+RR = 1/2
+```
+
+多题平均就是 MRR。
+
+### nDCG
+
+更重视相关结果是否靠前，并与理想排序归一化比较。
+
+## 17.2 Gate 指标
+
+- False Reject：有答案却拒绝；
+- False Allow：没答案却放行。
+
+二者必须同时看。
+
+## 17.3 Agent 指标
+
+真正 Agent Eval 还需要：
+
+```mermaid
+flowchart LR
+    TASK[Task set] --> RUN[Agent runs]
+    RUN --> TS[Task success]
+    RUN --> TOOL[Tool selection]
+    RUN --> ARG[Argument validity]
+    RUN --> REC[Recovery success]
+    RUN --> LAT[Latency]
+    RUN --> COST[Token / cost]
+```
+
+当前项目已有：
+
+- unit tests；
+- retrieval/gate 基础评测；
+- synthetic regression；
+- Tool runtime behavior tests。
+
+尚缺完整：
+
+- task success eval；
+- tool selection accuracy；
+- recovery success；
+- real-model E2E；
+- cost regression。
+
+这也是接下来很重要的工程升级。
+
+---
+
+# 18. Observability：Trace 不是把日志打满
+
+真正有用的 trace 要能回答：
+
+> “为什么这次请求慢/错/贵？”
+
+```mermaid
+flowchart LR
+    REQ[trace_id] --> P[plan span]
+    REQ --> R[retrieval span]
+    REQ --> RR[rerank span]
+    REQ --> M[model span]
+    REQ --> T[tool span]
+    T --> E[status + latency + error_type]
+```
+
+当前项目已有：
+
+- trace_id；
+- node latency；
+- 部分 model usage metadata；
+- tool step trace。
+
+还没有完整 OpenTelemetry/Langfuse/Prometheus 平台。
+
+面试时最重要的是先会解释**应该观测什么**，而不是只会说工具名字。
+
+---
+
+# 19. Docker、CI 与部署
+
+## 19.1 Docker
+
+```mermaid
+flowchart LR
+    Code[Code + dependencies] --> Image[Docker image]
+    Image --> Container[Running container]
+    Container --> Volume[(Persistent data)]
+```
+
+Container 删除不等于数据有备份。
+
+## 19.2 CI 能证明什么
+
+当前 CI 会覆盖：
+
+- Ruff lint/format；
+- mypy；
+- pytest；
+- offline smoke；
+- web behavior tests；
+- Docker build/smoke。
+
+绿色 CI 只能证明**这些检查**通过。
+
+它不能证明：
+
+- 真实模型回答正确；
+- 线上吞吐高；
+- 多租户安全；
+- RAG 零幻觉。
+
+---
+
+# 20. 一条完整学习 Lab：从教程文档到答案
+
+## Lab A：先跑通 RAG
+
+### Step 1：启动
+
+Windows：
+
+```powershell
+Copy-Item .env.example .env
+.\start.cmd
+```
+
+首次需要按你的模型服务配置 `.env`。
+
+### Step 2：上传
+
+上传：
+
+`data/tutorial/expense_policy.md`
+
+### Step 3：问有答案的问题
+
+```text
+单笔 260 元晚餐是否需要经理审批？
+```
+
+预期：系统应检索到餐费规则，并给出带来源的 grounded answer。
+
+### Step 4：问无答案的问题
+
+```text
+出差结束后多少天内必须报销？
+```
+
+预期：应该拒答/说明资料没有该信息，而不是编数字。
+
+### Step 5：解释数据流
+
+你要能自己画：
+
+```text
+question
+→ query plan
+→ sparse+dense
+→ RRF
+→ rerank
+→ evidence gate
+→ context
+→ LLM
+→ citation
+```
+
+## Lab B：观察 context
+
+阅读：
+
+`src/rag_agent/agent/prompts.py`
+
+修改一个仅用于实验的 budget，重新跑测试。
+
+你要回答：
+
+- 哪些候选被裁掉？
+- quote 是否只来自模型真正看到的内容？
+- 更小 budget 会不会把关键结论切掉？
+
+## Lab C：故意破坏 Gate
 
 ```powershell
 .\.venv\Scripts\python scripts/eval_portfolio.py --sparse-threshold 0.45
 .\.venv\Scripts\python scripts/eval_portfolio.py --sparse-threshold 0.25
 ```
 
-每次会打印报告路径，打开同名 Markdown 看指标，JSON 看逐题结果。
-预期：排名不因门控阈值改变而改变，放行决定可能变化。先读第 9 节例子，再看 p04/n08，
-记录正反变化。没有改变也应如实记录，不为了“完成实验”改结果。
+比较 false reject / false allow。
 
-### 11.3 第三次：理解预算测试
+## Lab D：Tool Agent
 
 ```powershell
-.\.venv\Scripts\python -m pytest tests/test_prompts.py -q
+.\.venv\Scripts\python scripts/tool_agent.py "知识库里的餐费审批规则是什么？" --json
 ```
 
-在 PyCharm 的 Python Console 可以跟做这个最小例子：
+你需要读懂每个 step。
+
+然后到 `tests/test_tooling.py` 看：
+
+- unknown tool；
+- invalid arguments；
+- timeout；
+- execution error。
+
+## Lab E：从空白重写最小 Registry
+
+不要复制源码，自己写：
 
 ```python
-from rag_agent.agent.prompts import build_context, source_list
-from rag_agent.schemas import Candidate
-
-c = Candidate(chunk_id="demo", text="证据正文。" * 200, metadata={"source": "demo.md"})
-bundle = build_context([c], max_chars=320)
-print(len(bundle.text), bundle.truncated)
-print(source_list(bundle.candidates)[0]["quote"])
-assert len(bundle.text) <= 320
-assert c.text == "证据正文。" * 200
+class ToolRegistry:
+    def register(...): ...
+    def execute(...): ...
 ```
 
-例子不入库、不调用模型。你会看到正文被裁剪，但原 Candidate 未变。接着自己把末尾加一句“最终结论”，
-观察它未进入上下文时是否也不出现在 quote。这才是在解释过后动手，不是凭空答题。
+至少实现：
 
-### 11.4 然后学习调试和小改动
+- 名称 allowlist；
+- 参数验证；
+- timeout；
+- error taxonomy。
 
-按顺序走：第 3–4 节理解对象/分块 → 第 5 节手算 RRF → 第 7 节模拟空输出 → 第 8 节解释双写失败。
-读 `tests/test_agent_graph.py` 的 FakeLLM，复制一个测试返回空字符串，预期是 generation_failure，
-而不是把已找到的资料说成不存在。只修改自己的测试，不需要花真实模型费用。
+写完再和项目代码对照。
 
-最后自己写 5 道新题，至少一题跨来源、一题主题很像但缺答案，先写标签再跑检索。
-会读会跑后才用不带 `--reveal` 的练习作为回顾；自评完全可选，不是进入下一节的门槛。
+---
 
-## 12. 面试表达、追问与简历
+# 21. 12 周项目学习路线
 
-### 12.1 90 秒讲法：先听懂示范，再换成自己的经历
+## Week 1：Python + 数据结构 + 项目目录
 
-“这是一个基于本地文档的问答作品。资料先解析切块，保存在正文索引和向量库。用户提问后，
-系统做查询规划、混合检索和重排，证据通过门控后整理到有限上下文中，再让模型生成带引用的回答。
-工程重点是失败可解释：我会区分没找到证据、模型生成失败和引用失败。项目还有临时 SQLite 的离线评测，
-能同时观察召回、排序和两类门控错误。目前是本地作品集，没有声称解决完整权限、逐句事实校验或生产并发。”
+目标：读懂 Candidate、dict/list/set、dataclass、异常、测试。
 
-这段描述仓库。要说“我负责了什么”，必须补你真实完成的动作，例如：“我复现了截断后 quote 不一致的问题，
-添加了一个末尾证据测试，并验证原始候选不被修改。”没做过就先跟做，不拿示范冒充经历。
+## Week 2：Parsing + Chunk
 
-### 12.2 高频追问的回答思路
+目标：自己解释 chunk_size/overlap trade-off。
 
-| 面试官问 | 回答应包含 |
+## Week 3：Sparse / Dense
+
+目标：能解释 BM25/FTS 与 embedding 的互补。
+
+## Week 4：Hybrid / RRF / Rerank
+
+目标：手算一次 RRF，跑一次 retrieval eval。
+
+## Week 5：Evidence / Context / Citation
+
+目标：能区分 relevance、support、citation validity。
+
+## Week 6：LangGraph
+
+目标：从空白画出主状态图，解释 bounded retry。
+
+## Week 7：Tool Calling
+
+目标：读懂并修改 Tool Registry / Schema / timeout。
+
+## Week 8：Backend API / SSE / concurrency
+
+目标：能解释请求生命周期、SSE 与 WebSocket、线程/async。
+
+## Week 9：State / Checkpoint / Memory
+
+目标：不再把 checkpoint 当 long-term memory。
+
+## Week 10：Reliability / Security
+
+目标：能设计 retry、deadline、HITL、tool permission。
+
+## Week 11：Eval / Observability
+
+目标：能设计 Agent task-success regression set。
+
+## Week 12：系统设计 + 面试复盘
+
+目标：白板设计一个支持 RAG、Tool、长任务、状态、权限、trace 的 Agent Backend。
+
+---
+
+# 22. 面试时怎么讲这个项目
+
+不要背“用了 FastAPI、LangGraph、Qdrant”。
+
+推荐结构：
+
+## 22.1 Problem
+
+> 企业/个人资料需要可追溯问答，直接让 LLM 猜会出现知识缺失和幻觉。
+
+## 22.2 Data flow
+
+> 文档解析切块后进入 SQLite FTS5 与 Qdrant；查询时做 sparse+dense、RRF、rerank、证据门控和 context selection，再 grounded generation 与 citation validation。
+
+## 22.3 Engineering choices
+
+> 采用有界 LangGraph workflow，不做无限 reflection；失败分成 evidence、generation、citation 等不同类型。
+
+## 22.4 Agent upgrade
+
+> 额外实现 bounded Tool Agent runtime，通过 Registry、Pydantic Schema、timeout、错误分类和 step trace 建立安全执行边界，并把 Hybrid Retriever 注册为只读知识库工具。
+
+## 22.5 Evaluation
+
+> 不把 CI 当效果评测，另外看 retrieval ranking、false reject/allow；下一步扩成 task/tool success 和 cost/latency regression。
+
+## 22.6 Limitations
+
+必须主动说：
+
+- Tool runtime 尚未并入主图；
+- 无 durable queue；
+- 无 long-term memory；
+- 无完整 RBAC/HITL/sandbox；
+- 无 production Agent Eval。
+
+这不是“暴露项目弱”，而是说明你知道工程边界。
+
+---
+
+# 23. 当前技术状态表
+
+| 能力 | 状态 |
 |---|---|
-| 为什么不只用向量？ | 语义与精确术语互补，错误码例子，以及成本/复杂度。 |
-| 为什么叫 Agent？ | 有界模型决策加程序控制，不是无限自主、多 Agent。 |
-| 拒答高怎么办？ | 先定位解析/召回/门控/生成/引用哪层，拿 p04 说明，不盲降阈值。 |
-| 引用能保证真实？ | 编号合法不等于逐句支持，用“30 秒变 60 秒”反例。 |
-| 上下文为什么整理？ | 噪声、重复、来源覆盖、预算和 quote 与模型所见一致。 |
-| 双库如何一致？ | 各自事务边界、权威正文回表、补偿清理，不称分布式原子事务。 |
-| 重启能恢复吗？ | 图状态与内存任务分开；当前没有完整任务恢复控制台。 |
-| 怎么证明改进？ | 同数据、单变量、真实报告、正负例、保留集与局限。 |
-| 用了 AI 吗？ | 如实说辅助范围，现场展示自己能解释与修改的部分。 |
+| FastAPI / REST | 已实现 |
+| SSE 节点事件 | 已实现 |
+| Parsing / Chunking | 已实现 |
+| SQLite FTS5 | 已实现 |
+| Qdrant dense retrieval | 已实现 |
+| Hybrid Retrieval | 已实现 |
+| Weighted RRF | 已实现 |
+| CrossEncoder rerank | 已实现 |
+| Evidence Gate | 已实现 |
+| Context Selection | 已实现，字符预算为主 |
+| Citation structure validation | 已实现 |
+| Explicit abstention | 已实现 |
+| LangGraph bounded workflow | 已实现 + 有测试 |
+| SQLite checkpoint | 已实现 |
+| Read-only MCP | 已实现 |
+| Tool Registry | 已实现独立 runtime + 有测试 |
+| Tool Schema validation | 已实现 + 有测试 |
+| Tool timeout/error taxonomy | 已实现 + 有测试 |
+| Tool execution trace | 已实现 |
+| Tool runtime integrated into main graph | 未实现 |
+| Token-aware context | 不完整 |
+| Redis / PostgreSQL | 未实现 |
+| Durable queue / worker | 未实现 |
+| Long-term memory | 未实现 |
+| HITL / RBAC | 未实现 |
+| OTel/Langfuse-class full tracing | 未实现 |
+| Multi-Agent | 未实现 |
+| K8s runtime | 未实现 |
+| Full Agent task-success eval | 未实现 |
 
-### 12.3 简历怎么写才经得起追问
+实时招聘优先级请看 [JOB_SKILLS.md](JOB_SKILLS.md)，实现顺序看 [ROADMAP.md](ROADMAP.md)。
 
-不必把所有技术名词塞进一段。按目标岗位选两三项真实贡献：
+---
 
-> 基于 Python / FastAPI / LangGraph 迭代文档问答作品，使用 Dense/FTS5、RRF、重排与引用编号校验；
-> 围绕上下文预算和拒答失败路径建立回归测试，在隔离虚构语料上对比检索配置并记录误拒答及错误放行。
-
-模板不是个人经历证明。数字必须带范围：32 题开发集、sparse 对照、未测 LLM；不要改写为“准确率大幅提升”。
-别写不存在的实习业务、百万用户、零幻觉、独立原创全部模块或伪造开发历史。
-AI 可以帮忙写代码，判断、复现和解释仍然要你学会；这会让它成为真实作品，而不是仅仅外观像你做的。
-
-### 12.4 仍需长期练的计算机基础
-
-每次练一个：数组/哈希/堆/树的适用场景与复杂度；HTTP/TCP、超时与重试；SQL 索引、事务与锁；
-进程/线程、竞态条件；测试分层与 Git 分支/冲突。这份手册给了项目内联系，不包含所有算法题解或完整课程。
-看完后先演示一条成功路径、一条失败路径和一个自己的测试，再开始模拟追问。
-
-## 13. 新电脑启动和继续开发交接
-
-### 13.1 从 GitHub 取代码
+# 24. 新电脑接手
 
 第一次：
 
@@ -497,80 +1439,86 @@ git clone https://github.com/xcl2005/RAG-Agent.git
 cd RAG-Agent
 ```
 
-已有副本：先 `git status` 检查本机未提交改动，保存自己的工作后再执行：
+已有仓库：
 
 ```powershell
+git status
 git switch main
 git pull --ff-only origin main
 ```
 
-若提示冲突或不能快进，停止处理并检查差异，不使用 `reset --hard` 覆盖另一台电脑的工作。
-
-### 13.2 只看教材和跑离线实验
-
-打开本文件即可阅读，不需要 Docker 或 Key。运行代码需 Python（建议 3.12）和已安装项目依赖：
+建立环境：
 
 ```powershell
 py -3.12 -m venv .venv
 .\.venv\Scripts\python -m pip install -e ".[dev,mcp]"
-.\.venv\Scripts\python scripts/eval_portfolio.py
-.\.venv\Scripts\python scripts/practice_interview.py show q01 --reveal
 ```
 
-依赖首次安装需要网络；安装后这两个脚本不需要模型网络或 Key。不要复制旧电脑的 `.venv`，应在新机重建。
-
-### 13.3 启动完整网站
-
-需要 Docker Desktop、模型配置和 Qdrant。只有不存在 `.env` 时才复制模板，避免覆盖已有配置：
+离线测试：
 
 ```powershell
-if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+.\.venv\Scripts\python -m ruff check .
+.\.venv\Scripts\python -m mypy
+.\.venv\Scripts\python -m pytest -m "not integration" -q
+node --test tests/web_ui_helpers.test.cjs
 ```
 
-在 `.env` 填模型兼容接口、精确模型/部署名称、模型 Key 和本地应用访问 Key。使用你之前的 GLM 兼容服务时：
+完整站点可使用根目录 `start.cmd`。
 
-```dotenv
-LLM_API_MODE=chat_completions
-OPENAI_BASE_URL=你的服务控制台给出的兼容接口地址
-CHAT_MODEL=服务实际要求的模型或部署名称
-OPENAI_API_KEY=你的新模型Key
-LLM_THINKING_MODE=disabled
-API_ACCESS_KEY=你自行设置的本地应用访问密钥
-```
+不要提交：
 
-以上是占位说明，不可原样作为有效凭证。模型名称以服务控制台为准，不能仅凭口头的“GLM 5.2”猜 API ID。
-日常双击根目录 `start.cmd`；网站在 `http://127.0.0.1:8000`（以你的端口配置为准）。
-浏览器连接设置填写本地 `API_ACCESS_KEY`，不是模型 Key。首次完整问答可能需要下载/加载 embedding 和 reranker。
+- `.env`；
+- API keys/tokens；
+- 私人文档；
+- 本地数据库；
+- Qdrant 数据；
+- 模型缓存；
+- `.venv`。
 
-PyCharm 中选择 `.venv\Scripts\python.exe` 作为解释器；若后台服务占端口，先用 `stop.cmd` 停止本项目服务。
-执行 `docker compose up -d qdrant` 保证向量库运行，然后右键 `scripts/run_api.py` 选择 Run 或 Debug，
-工作目录设为仓库根目录。这个入口会加载 `.env`。也可以一直用 PyCharm Terminal 执行 `start.cmd`。
+根目录 `AGENTS.md` 是以后 Codex/Agent 的接手协议：每次进行实质升级前先刷新招聘市场，再重排 Roadmap。
 
-### 13.4 什么不会随 GitHub 自动迁移
+---
 
-- `.env`、模型 Key、本地访问 Key：不提交。用密码管理器或安全方式重新配置，曾公开暴露的 Key 应轮换。
-- 私人上传文件、身份证/成绩单、SQLite/Qdrant 数据、对话 checkpoint：不提交。推荐新机重新上传需要的文件并重建索引。
-- `reports/` 里的原始实验和个人自评：默认不提交；需要保留可单独安全复制，不应假设 git pull 会带过来。
-- `.venv` 和模型缓存：不提交；新电脑重新安装/下载。
+# 25. 外部参考怎么用
 
-今天推送范围是代码、公开虚构评测资料、测试与教材，不把私人资料放进公开仓库。
+下面这些材料适合学习**表达方式和工程思想**：
 
-### 13.5 给下一台电脑的继续开发说明
+- Anthropic — Building Effective Agents  
+  <https://www.anthropic.com/engineering/building-effective-agents>
+- Anthropic — Effective Context Engineering for AI Agents  
+  <https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents>
+- Anthropic — Demystifying Evals for AI Agents  
+  <https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents>
+- OpenAI — A Practical Guide to Building Agents  
+  <https://openai.com/business/guides-and-resources/a-practical-guide-to-building-ai-agents/>
+- LangGraph — Human-in-the-loop / persistence docs  
+  <https://docs.langchain.com/oss/python/langchain/human-in-the-loop>
 
-当前已完成：上下文整理和边界回归、离线 sparse 对照实验、12 题辅助练习、单文档教学第一版。
-上一轮本地验证为 136 Python 测试、7 前端行为测试，覆盖率 88.55%，Ruff/mypy 通过；
-这不是远程 CI 已通过、真实 GLM 效果达标或用户已掌握的声明。后续请重新验证当前提交。
+本教材的图全部针对本项目重新绘制，主要使用 Mermaid；GitHub 可以原生渲染 Mermaid Markdown。不要把外部文章的漂亮图复制进仓库。
 
-未完成的优先事项：
+---
 
-1. 扩展不同公司同级岗位的官方样本，形成去重后的能力矩阵，避免只围绕百度样本规划。
-2. 用本手册先讲后练；补初学者卡住的概念、图解和完整小例子，维持一份主教材，不继续增加必读文档。
-3. 冻结独立测试集，做 Dense-only / Sparse-only / Hybrid / Hybrid+rerank 隔离消融。
-4. 在明确模型、费用和数据权限后做真实 GLM 回归，测最终答案与引用语义；不得由离线 FTS 指标推断。
-5. 再根据岗位和实验决定 OCR、语义证据判断或队列/权限哪项先做，别为了热词一次全加。
+# 26. 最后检查：你真的学会了吗？
 
-可直接交给下一次助手：
+请在不看上文的情况下回答：
 
-> 请先读 docs/PROJECT_HANDBOOK.md 和当前 Git 状态。我能写基础 Python，但还讲不清项目；
-> 我要一份先解释、后示例、再跟做的主教材，不要没教先考。保留真实贡献和失败指标；
-> 继续核对多家公司初级 AI 应用岗位，补招聘差距和隔离评测。不要上传密钥或私人资料，远程只保留 main。
+1. 为什么 Sparse 和 Dense 要并存？
+2. 为什么不能直接把 BM25 score 和 cosine score 相加？
+3. RRF 解决什么问题？
+4. Retriever 和 reranker 区别是什么？
+5. 为什么“检索相关”不等于“证据足够”？
+6. Context 和 State 有什么区别？
+7. Checkpoint 为什么不是 long-term memory？
+8. Tool Registry 防什么风险？
+9. Schema validation 为什么是 Agent 安全边界？
+10. Tool timeout 后为什么还要考虑底层取消？
+11. Citation 合法为什么不代表事实一定正确？
+12. False reject 与 false allow 为什么要一起看？
+13. SSE 与 WebSocket 区别是什么？
+14. 内存 JobRegistry 为什么不是 durable queue？
+15. HITL 为什么依赖持久状态？
+16. 为什么一个 Agent loop 必须有 step limit？
+17. 当前项目哪些 Agent Backend 技术仍未实现？
+18. 如果让你下一步只升级一项，你会选什么，为什么，怎么评测？
+
+如果你只能复述定义，请回到对应 Lab；如果能用本项目代码、失败案例和指标解释，才开始接近“掌握”。
