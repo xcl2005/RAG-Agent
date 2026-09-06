@@ -171,7 +171,9 @@ Teach first; practice second; test/quiz last. Never use an unimplemented capabil
 
 ## 5. Interview/algorithm rule
 
-`docs/INTERVIEW_ALGORITHMS.md` is not a list of links. It should train the complete interview stack for Agent Backend / AI Application roles:
+`docs/INTERVIEW_ALGORITHMS.md` must be a **self-contained textbook + problem book**, not merely a list of LeetCode numbers or external links.
+
+It should train the complete interview stack for Agent Backend / AI Application roles:
 
 ```text
 Hot 100 patterns
@@ -185,6 +187,47 @@ Hot 100 patterns
 + AI coding tasks
 ```
 
+### 5.1 Review the user's starred algorithm repositories first
+
+When local GitHub CLI/auth is available, inspect the authenticated user's starred repositories before changing the algorithm curriculum:
+
+```bash
+gh api --paginate user/starred --jq '.[].full_name'
+```
+
+Filter for LeetCode / algorithms / interview / CodeTop / Hot100 / data-structures repositories and record which ones materially influenced the curriculum. If `gh` or star access is unavailable, state that explicitly instead of pretending the starred list was reviewed.
+
+Also refresh high-quality public references. Current examples worth comparing include:
+
+- `labuladong/fucking-algorithm` — pattern-first reasoning, visual explanation, spaced practice.
+- `doocs/leetcode` — broad coverage, topic indexing, searchable per-problem explanations.
+- `Hubert-hwk/hot100-judge` — Hot100 + CodeTop frequency, ACM/core-code dual mode, local tests/progress.
+- `leetcode-go/top-interview-150` — topic-based interview organization.
+
+These are **reference designs**, not sources to copy. Paraphrase problem statements, write original explanations/code/examples, and keep attribution/links where a reference materially influenced structure.
+
+### 5.2 Every included algorithm problem must be self-contained
+
+For every problem retained in the study route, include inside the document:
+
+```text
+problem number/title + type/pattern + priority
+→ original paraphrased task description (not copied LeetCode text)
+→ small original example
+→ recognition signals
+→ brute-force baseline when educationally useful
+→ optimal idea / invariant
+→ diagram when useful
+→ complete Python solution
+→ time/space complexity
+→ common mistakes
+→ at least one variant/follow-up
+→ backend/Agent transfer when relevant
+→ review checkpoint
+```
+
+A learner should not need to open LeetCode to understand the task or solution. External links are optional verification/reference only.
+
 For each algorithm family, prefer:
 
 ```text
@@ -192,10 +235,10 @@ recognition signal
 → visual model
 → core invariant
 → template
-→ representative problems
+→ fully explained representative problems
 → common mistakes
 → complexity
-→ variant
+→ variants
 → backend/Agent transfer
 → spaced re-write standard
 ```
