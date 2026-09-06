@@ -228,6 +228,40 @@ problem number/title + type/pattern + priority
 
 A learner should not need to open LeetCode to understand the task or solution. External links are optional verification/reference only.
 
+### 5.3 Readability and visual consistency are hard requirements
+
+The algorithm textbook can be very long, but it must never look like an unstructured Markdown dump.
+
+Use one stable page hierarchy:
+
+```text
+Top-level title
+→ quick-start / legend / table of contents
+→ Part
+→ topic overview
+→ one pattern diagram
+→ collapsible problem cards
+→ topic summary / transfer
+→ review checklist
+```
+
+Formatting rules:
+
+- Keep a clickable table of contents or compact topic index near the top.
+- Move reference-source notes and maintenance details to an appendix; do not put them before the actual learning path.
+- Use `<details><summary>...</summary>` for individual problem solutions so 50–100+ problems remain browsable.
+- Every problem summary uses one format, e.g. `LC 76 · Minimum Window Substring · Sliding Window · P0`.
+- Use `P0 / P1 / P2` consistently; define the legend once instead of explaining it repeatedly.
+- Put `题意 / 例子 / 识别 / 思路 / 代码 / 复杂度 / 易错 / 追问 / 工程迁移` in the same order for every problem.
+- Avoid excessive emoji, decorative badges, nested heading noise and giant unbroken tables.
+- Prefer short paragraphs, small tables and Mermaid only when they reduce cognitive load.
+- Do not show multiple similar diagrams for the same pattern; one good diagram is better than decoration.
+- Keep code blocks immediately next to the explanation they support.
+- At the end of each topic, include a compact “这一类你应该会什么” checklist.
+- Maintain enough whitespace between cards/sections so GitHub rendering is comfortable on desktop and mobile.
+
+Before handoff, visually inspect the rendered Markdown on GitHub when possible. The acceptance question is not only “is the content complete?” but also “can a learner find the right topic/problem in under 30 seconds?”
+
 For each algorithm family, prefer:
 
 ```text
