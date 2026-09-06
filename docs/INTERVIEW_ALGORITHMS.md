@@ -1,11 +1,50 @@
 # Agent Backend / AI Application 面试算法与 Coding 教材
 
-> 版本：2026-09-07，第四版（自包含题库版）  
-> 目标岗位：Agent Backend、AI Application Engineer、大模型应用研发、LLM Application Engineer、AI 全栈偏后端、Data/Search/Knowledge Agent、Agent Runtime 初级岗位。
+> **版本**：2026-09-07 · 第四版（自包含题库版）  
+> **目标岗位**：Agent Backend、AI Application Engineer、大模型应用研发、LLM Application Engineer、AI 全栈偏后端、Data/Search/Knowledge Agent、Agent Runtime 初级岗位。
 
-这份文档的目标不是“告诉你去刷哪些题”，而是让你**不离开这个文档，也能完成主要算法与 Coding 学习**。
+这不是“题号清单”。目标是让你**只打开这一份文档，也能完成主要算法、SQL、Backend Coding 和 AI Coding 学习**。
 
-每一道纳入路线的 LeetCode 题都尽量包含：
+---
+
+## 快速导航
+
+| 区域 | 你要学什么 | 建议顺序 |
+|---|---|---:|
+| Part A–J | Hash、双指针、滑窗、链表、树、堆、二分、图、回溯、贪心、DP、Trie、LRU | 1 |
+| Part K | Quick Sort、Merge Sort、Dijkstra、Difference Array | 2 |
+| Part L | ACM 输入输出 | 3 |
+| Part M | SQL 与数据库面试 | 4 |
+| Part N | 限流、Token Bucket、Retry、TTL Cache、Queue、并发控制 | 5 |
+| Part O | FastAPI、SSE、Tool Calling | 6 |
+| Part P | 12 周训练计划 | 按周执行 |
+| Part Q | 复习与最终验收 | 全程使用 |
+| Appendix | GitHub 参考项目与维护规则 | 按需看 |
+
+### 优先级图例
+
+| 标记 | 含义 | 目标 |
+|---|---|---|
+| **P0** | 当前目标岗位的核心高频题 | 一周后仍能从空白写 |
+| **P1** | 高频补充 / 重要变化题 | 能识别模式并独立完成大部分 |
+| **P2** | 进阶或特定公司/岗位补充 | 有余力再扩展 |
+
+### 掌握度图例
+
+| 状态 | 标准 |
+|---|---|
+| A | 完全不会 |
+| B | 看解析能理解 |
+| C | 当天能从空白写 |
+| D | 一周后仍能从空白写，并能应对一个变化条件 |
+
+> **P0 最终尽量全部达到 D。** “AC 过一次”不等于掌握。
+
+---
+
+## 这份教材怎么用
+
+每一道纳入路线的题都尽量包含：
 
 ```text
 题型 / 优先级
@@ -20,36 +59,27 @@
 → Backend / Agent 迁移（适用时）
 ```
 
+题解默认使用 `<details>` 折叠。**先自己想，再展开答案。**
+
+建议每题：
+
+```text
+先读题意
+→ 不看答案想 10–20 分钟
+→ 说出暴力思路
+→ 找模式 / 不变量
+→ 写最优解
+→ 手测边界
+→ 解释复杂度
+→ 面试官改条件
+→ Day 1 / 3 / 7 / 14 复写
+```
+
 > 版权边界：题号与标题用于定位；题意、例子、解析和代码均在本项目中重新表述/编写，不复制第三方题解或 LeetCode 原题全文。
 
 ---
 
-# 0. 参考了哪些优秀 GitHub 算法项目
-
-本轮实际比较了这些公开仓库的组织方式：
-
-- `labuladong/fucking-algorithm`：强调**算法思维和套路优先于代码数量**，通过同类题举一反三。
-- `doocs/leetcode`：覆盖面大，按算法专题和题号都能检索，适合作为“完整题解资料库”参考。
-- `Hubert-hwk/hot100-judge`：Hot100、CodeTop 高频、ACM/核心代码双模式、本地测试与进度追踪结合得很好。
-- `leetcode-go/top-interview-150`：按数组、双指针、哈希、链表、树、图等专题组织，面试导向清楚。
-
-本项目吸收的是**教学结构**，不是复制内容。
-
-根目录 `AGENTS.md` 还要求：以后 Codex 在本地 GitHub CLI 可用时，先运行：
-
-```bash
-gh api --paginate user/starred --jq '.[].full_name'
-```
-
-把你本人 star 的 LeetCode / Hot100 / CodeTop / algorithms 仓库也纳入参考。当前 ChatGPT GitHub 连接没有暴露 starred-repositories 列表，因此本轮不能假装已经读取你的个人 Stars。
-
----
-
-# 1. Hot100 到底够不够
-
-结论：**Hot100 是算法主干，但 Agent Backend / AI Application 面试绝不只有 Hot100。**
-
-完整准备应是：
+## 一张图看完整训练体系
 
 ```mermaid
 flowchart TD
@@ -68,43 +98,18 @@ flowchart TD
     K --> L[System Design + 项目深挖]
 ```
 
-对于你当前目标，优先级建议：
+结论：**Hot100 是算法主干，但 Agent Backend / AI Application 面试绝不只有 Hot100。**
 
-1. **P0 算法题**做到一周后仍能独立写。
-2. P1 算法题能识别并完成大部分。
-3. SQL、LRU、限流、队列、retry、SSE 等能现场写。
+对于当前目标，优先级：
+
+1. P0 算法题做到一周后仍能独立写；
+2. P1 能识别并完成大部分；
+3. SQL、LRU、限流、队列、retry、SSE 等能现场写；
 4. 能把算法迁移到 Agent Backend 工程。
 
 ---
 
-# 2. 每道题怎样才算“会”
-
-建议使用四级状态：
-
-- `A`：完全不会；
-- `B`：看解析能理解；
-- `C`：当天能从空白写；
-- `D`：一周后仍能从空白写，并能应对一个变化条件。
-
-P0 最终尽量达到 `D`。
-
-每题训练流程：
-
-```text
-先读题意
-→ 不看答案想 10–20 分钟
-→ 说出暴力思路
-→ 找模式 / 不变量
-→ 写最优解
-→ 手测边界
-→ 解释复杂度
-→ 面试官改条件
-→ Day 1 / 3 / 7 / 14 复写
-```
-
----
-
-# 3. 数据结构基础约定
+## 数据结构基础约定
 
 以下链表/树题默认使用这些常见结构：
 
@@ -126,9 +131,9 @@ class TreeNode:
 
 ---
 
-# Part A：Array / Hash / Two Pointers / Window
+# Part A · Array / Hash / Two Pointers / Window
 
-## 4. Hash：看到“查过没有、计数、分组、配对”先想到哈希
+## 1. Hash · 看到“查过没有、计数、分组、配对”先想到哈希
 
 ```mermaid
 flowchart LR
@@ -139,9 +144,9 @@ flowchart LR
 ```
 
 <details>
-<summary><b>LC 1 — Two Sum｜Hash｜P0</b></summary>
+<summary><b>LC 1 · Two Sum · Hash · P0</b></summary>
 
-**题意（自写）**：给定整数数组和目标值，找两个不同下标，使两数之和等于目标值。
+**题意**：给定整数数组和目标值，找两个不同下标，使两数之和等于目标值。
 
 **例子**：`[4, 7, 1, 9]`，目标 `10`，可返回下标 `[2, 3]`，因为 `1 + 9 = 10`。
 
@@ -162,7 +167,7 @@ def two_sum(nums, target):
 
 **复杂度**：时间 O(n)，空间 O(n)。
 
-**易错点**：先写入再查询会在 `target=2*x` 时错误地使用同一个元素两次。
+**易错**：先写入再查询会在 `target=2*x` 时错误地使用同一个元素两次。
 
 **追问**：若数组已排序，可用双指针 O(1) 额外空间。
 
@@ -170,7 +175,7 @@ def two_sum(nums, target):
 </details>
 
 <details>
-<summary><b>LC 49 — Group Anagrams｜Hash + Canonical Key｜P0</b></summary>
+<summary><b>LC 49 · Group Anagrams · Hash + Canonical Key · P0</b></summary>
 
 **题意**：把由相同字符、不同排列组成的字符串放到同一组。
 
@@ -194,7 +199,7 @@ def group_anagrams(words):
 
 **复杂度**：若平均字符串长 k，总体约 O(n * k log k)。
 
-**易错点**：不要用 `set(word)`，它会丢失字符次数。
+**易错**：不要用 `set(word)`，它会丢失字符次数。
 
 **追问**：若字符集固定为 26 个小写字母，可用 26 维计数 tuple，把单词处理降到 O(k)。
 
@@ -202,7 +207,7 @@ def group_anagrams(words):
 </details>
 
 <details>
-<summary><b>LC 128 — Longest Consecutive Sequence｜Hash Set｜P0</b></summary>
+<summary><b>LC 128 · Longest Consecutive Sequence · Hash Set · P0</b></summary>
 
 **题意**：无序整数数组中，找最长连续整数序列长度；要求尽量线性时间。
 
@@ -228,13 +233,13 @@ def longest_consecutive(nums):
 
 **复杂度**：平均 O(n) 时间，O(n) 空间。
 
-**易错点**：对每个元素都向两边扩张会退化到 O(n²)。
+**易错**：对每个元素都向两边扩张会退化到 O(n²)。
 
 **追问**：为什么 while 总次数仍是 O(n)？因为每条连续链只从起点完整走一次。
 </details>
 
 <details>
-<summary><b>LC 347 — Top K Frequent Elements｜Counter + Heap / Bucket｜P0</b></summary>
+<summary><b>LC 347 · Top K Frequent Elements · Counter + Heap · P0</b></summary>
 
 **题意**：返回出现频率最高的 k 个不同元素。
 
@@ -254,17 +259,23 @@ def top_k_frequent(nums, k):
 
 **复杂度**：计数 O(n)，堆法约 O(m log k)，m 为不同元素数。
 
-**易错点**：不要默认“TopK 就排序全部”；当 m 很大时堆更合适。
+**易错**：不要默认“TopK 就排序全部”；当 m 很大时堆更合适。
 
 **工程迁移**：热门 query、TopK 文档、日志高频错误码都可用同一思路。
 </details>
 
+### 这一类你应该会什么
+
+- 能解释 HashMap / Set 为什么能把很多 O(n²) 查找降到平均 O(n)；
+- 能为“分组/去重/配对”设计稳定 key；
+- 知道 TopK 什么时候用堆，什么时候直接排序更简单。
+
 ---
 
-## 5. Two Pointers：移动指针必须能解释“为什么不漏答案”
+## 2. Two Pointers · 移动指针必须有正确性理由
 
 <details>
-<summary><b>LC 283 — Move Zeroes｜Two Pointers｜P0</b></summary>
+<summary><b>LC 283 · Move Zeroes · Two Pointers · P0</b></summary>
 
 **题意**：原地把所有 0 移到数组末尾，同时保持非零元素相对顺序。
 
@@ -283,13 +294,13 @@ def move_zeroes(nums):
 
 **复杂度**：O(n) 时间，O(1) 空间。
 
-**易错点**：若另开数组虽简单，但违背原地要求。
+**易错**：另开数组虽简单，但违背原地要求。
 
-**迁移**：稳定压缩 / filter-in-place。
+**工程迁移**：稳定压缩 / filter-in-place。
 </details>
 
 <details>
-<summary><b>LC 11 — Container With Most Water｜Two Pointers｜P0</b></summary>
+<summary><b>LC 11 · Container With Most Water · Two Pointers · P0</b></summary>
 
 **题意**：每个数组值代表竖线高度，选两条线形成容器，使面积最大。
 
@@ -312,11 +323,11 @@ def max_area(height):
 
 **复杂度**：O(n) / O(1)。
 
-**易错点**：移动较高一侧无法改善当前短板，缺乏正确性依据。
+**易错**：移动较高一侧无法改善当前短板，缺乏正确性依据。
 </details>
 
 <details>
-<summary><b>LC 15 — 3Sum｜Sort + Two Pointers｜P0</b></summary>
+<summary><b>LC 15 · 3Sum · Sort + Two Pointers · P0</b></summary>
 
 **题意**：找所有不重复的三元组，使三个数之和为 0。
 
@@ -354,13 +365,13 @@ def three_sum(nums):
 
 **复杂度**：O(n²) 时间；排序额外空间依实现。
 
-**易错点**：最大难点是去重，不是双指针本身。
+**易错**：最大难点是去重，不是双指针本身。
 
 **追问**：扩展到 4Sum / nSum 时如何递归降维？
 </details>
 
 <details>
-<summary><b>LC 42 — Trapping Rain Water｜Two Pointers｜P0</b></summary>
+<summary><b>LC 42 · Trapping Rain Water · Two Pointers · P0</b></summary>
 
 **题意**：柱状高度数组中，计算下雨后能积多少水。
 
@@ -385,14 +396,20 @@ def trap(height):
 
 **复杂度**：O(n) / O(1)。
 
-**易错点**：不理解“为什么可以只看当前较短侧”就容易写错。
+**易错**：不理解“为什么可以只看当前较短侧”就容易写错。
 
 **变化**：也可用单调栈按横向水层结算。
 </details>
 
+### 这一类你应该会什么
+
+- 每次移动 left/right 时能说出“为什么不会漏解”；
+- 能区分同向快慢指针与左右夹逼双指针；
+- 遇到有序数组先检查是否能用双指针替代 Hash。
+
 ---
 
-## 6. Sliding Window：连续区间 + 动态满足条件
+## 3. Sliding Window · 连续区间 + 动态满足条件
 
 ```mermaid
 flowchart LR
@@ -404,7 +421,7 @@ flowchart LR
 ```
 
 <details>
-<summary><b>LC 3 — Longest Substring Without Repeating Characters｜Sliding Window｜P0</b></summary>
+<summary><b>LC 3 · Longest Substring Without Repeating Characters · Sliding Window · P0</b></summary>
 
 **题意**：求字符串中最长“不含重复字符”的连续子串长度。
 
@@ -425,13 +442,13 @@ def length_of_longest_substring(s):
 
 **复杂度**：O(n) / O(字符集)。
 
-**易错点**：`left = last[ch] + 1` 前必须确认旧位置仍在当前窗口内，否则 left 可能倒退。
+**易错**：`left = last[ch] + 1` 前必须确认旧位置仍在当前窗口内，否则 left 可能倒退。
 
 **工程迁移**：最近窗口内唯一 session/token 等去重逻辑。
 </details>
 
 <details>
-<summary><b>LC 438 — Find All Anagrams in a String｜Fixed Sliding Window｜P0</b></summary>
+<summary><b>LC 438 · Find All Anagrams in a String · Fixed Window · P0</b></summary>
 
 **题意**：在长字符串中找所有长度等于模式串、且字符多重集合相同的子串起点。
 
@@ -460,11 +477,11 @@ def find_anagrams(s, p):
 
 **复杂度**：使用小字符集时近似 O(n)；Counter 相等检查与字符集大小有关。
 
-**优化追问**：如何用 matched-count 避免每次比较整个 Counter？
+**追问**：如何用 matched-count 避免每次比较整个 Counter？
 </details>
 
 <details>
-<summary><b>LC 76 — Minimum Window Substring｜Variable Sliding Window｜P0</b></summary>
+<summary><b>LC 76 · Minimum Window Substring · Variable Window · P0</b></summary>
 
 **题意**：在 s 中找最短连续子串，使它包含 t 的全部字符及次数。
 
@@ -501,11 +518,11 @@ def min_window(s, t):
 
 **复杂度**：O(n + |t|) 平均时间，O(字符集) 空间。
 
-**易错点**：`while missing==0` 不能写成 `if`，因为需要尽可能收缩。
+**易错**：`while missing==0` 不能写成 `if`，因为需要尽可能收缩。
 </details>
 
 <details>
-<summary><b>LC 239 — Sliding Window Maximum｜Monotonic Queue｜P1</b></summary>
+<summary><b>LC 239 · Sliding Window Maximum · Monotonic Queue · P1</b></summary>
 
 **题意**：固定大小 k 的窗口从左向右滑动，输出每个窗口最大值。
 
@@ -534,12 +551,18 @@ def max_sliding_window(nums, k):
 **工程迁移**：窗口指标、限流统计、在线监控。
 </details>
 
+### 这一类你应该会什么
+
+- 一眼区分固定窗口与可变窗口；
+- 能回答什么时候扩、什么时候缩、什么时候更新答案；
+- 理解滑动窗口为什么能迁移到 Rate Limiter。
+
 ---
 
-## 7. Prefix Sum / Prefix Product
+## 4. Prefix Sum / Prefix Product
 
 <details>
-<summary><b>LC 560 — Subarray Sum Equals K｜Prefix Sum + Hash｜P0</b></summary>
+<summary><b>LC 560 · Subarray Sum Equals K · Prefix Sum + Hash · P0</b></summary>
 
 **题意**：统计和等于 k 的连续子数组数量。
 
@@ -563,13 +586,13 @@ def subarray_sum(nums, k):
 
 **复杂度**：O(n) / O(n)。
 
-**易错点**：`count[0]=1` 代表从数组起点开始的子数组。
+**易错**：`count[0]=1` 代表从数组起点开始的子数组。
 
 **为什么不能普通滑窗**：数组可含负数，窗口和不具有单调性。
 </details>
 
 <details>
-<summary><b>LC 238 — Product of Array Except Self｜Prefix/Suffix Product｜P0</b></summary>
+<summary><b>LC 238 · Product of Array Except Self · Prefix/Suffix · P0</b></summary>
 
 **题意**：对每个位置 i，返回除 nums[i] 外所有元素的乘积，不能使用除法。
 
@@ -593,17 +616,17 @@ def product_except_self(nums):
 
 **识别信号**：“当前位置答案依赖左侧整体 + 右侧整体”。
 
-**易错点**：有 0 时用“总乘积 / 当前值”会直接失效。
+**易错**：有 0 时用“总乘积 / 当前值”会直接失效。
 </details>
 
 ---
 
-# Part B：Linked List
+# Part B · Linked List
 
-## 8. 链表核心：每次改 next 前先保存后继
+## 5. 链表核心 · 每次改 next 前先保存后继
 
 <details>
-<summary><b>LC 206 — Reverse Linked List｜Pointer Reversal｜P0</b></summary>
+<summary><b>LC 206 · Reverse Linked List · Pointer Reversal · P0</b></summary>
 
 **题意**：把单链表方向全部反转。
 
@@ -627,11 +650,11 @@ def reverse_list(head):
 
 **复杂度**：O(n) / O(1)。
 
-**易错点**：没先保存 `cur.next` 就改指针，会丢掉剩余链表。
+**易错**：没先保存 `cur.next` 就改指针，会丢掉剩余链表。
 </details>
 
 <details>
-<summary><b>LC 21 — Merge Two Sorted Lists｜Linked List Merge｜P0</b></summary>
+<summary><b>LC 21 · Merge Two Sorted Lists · Linked List Merge · P0</b></summary>
 
 **题意**：合并两个升序链表为一个升序链表。
 
@@ -654,7 +677,7 @@ def merge_two_lists(a, b):
 </details>
 
 <details>
-<summary><b>LC 141 — Linked List Cycle｜Fast/Slow Pointers｜P0</b></summary>
+<summary><b>LC 141 · Linked List Cycle · Fast/Slow Pointers · P0</b></summary>
 
 **题意**：判断单链表是否存在环。
 
@@ -675,7 +698,7 @@ def has_cycle(head):
 </details>
 
 <details>
-<summary><b>LC 160 — Intersection of Two Linked Lists｜Pointer Switching｜P0</b></summary>
+<summary><b>LC 160 · Intersection of Two Linked Lists · Pointer Switching · P0</b></summary>
 
 **题意**：两个单链表若共享后半段节点，返回第一个共享节点。
 
@@ -692,11 +715,11 @@ def get_intersection_node(head_a, head_b):
 
 **复杂度**：O(m+n) / O(1)。
 
-**易错点**：比较节点身份，不是节点值。
+**易错**：比较节点身份，不是节点值。
 </details>
 
 <details>
-<summary><b>LC 19 — Remove Nth Node From End｜Two Pointers + Dummy｜P0</b></summary>
+<summary><b>LC 19 · Remove Nth Node From End · Two Pointers + Dummy · P0</b></summary>
 
 **题意**：删除倒数第 n 个节点。
 
@@ -715,11 +738,11 @@ def remove_nth_from_end(head, n):
 
 **复杂度**：O(n) / O(1)。
 
-**易错点**：为什么 fast 先走 `n+1` 步？因为 slow 最终要停在待删除节点的前驱。
+**易错**：为什么 fast 先走 `n+1` 步？因为 slow 最终要停在待删除节点的前驱。
 </details>
 
 <details>
-<summary><b>LC 2 — Add Two Numbers｜Linked List Simulation｜P0</b></summary>
+<summary><b>LC 2 · Add Two Numbers · Linked List Simulation · P0</b></summary>
 
 **题意**：两个链表按低位到高位存数字，逐位相加并处理进位。
 
@@ -743,11 +766,11 @@ def add_two_numbers(a, b):
 
 **复杂度**：O(max(m,n)) 时间。
 
-**易错点**：最后一个 carry 不能漏。
+**易错**：最后一个 carry 不能漏。
 </details>
 
 <details>
-<summary><b>LC 25 — Reverse Nodes in k-Group｜Segment Reversal｜P1</b></summary>
+<summary><b>LC 25 · Reverse Nodes in k-Group · Segment Reversal · P1</b></summary>
 
 **题意**：链表每 k 个节点为一组反转；不足 k 个的尾部保持原顺序。
 
@@ -782,7 +805,7 @@ def reverse_k_group(head, k):
 </details>
 
 <details>
-<summary><b>LC 138 — Copy List with Random Pointer｜Hash Mapping｜P1</b></summary>
+<summary><b>LC 138 · Copy List with Random Pointer · Hash Mapping · P1</b></summary>
 
 **题意**：链表节点除了 next 还有 random 指针，深拷贝整个结构。
 
@@ -808,12 +831,18 @@ def copy_random_list(head):
 **追问**：能否 O(1) 额外空间？可以把复制节点临时穿插到原链表中，再拆分。
 </details>
 
+### 这一类你应该会什么
+
+- dummy node、快慢指针、指针换路；
+- 改链前先保存后继；
+- 能画出 LRU 里的双向链表，而不是只背代码。
+
 ---
 
-# Part C：Stack / Monotonic Stack / Queue
+# Part C · Stack / Monotonic Stack / Queue
 
 <details>
-<summary><b>LC 20 — Valid Parentheses｜Stack｜P0</b></summary>
+<summary><b>LC 20 · Valid Parentheses · Stack · P0</b></summary>
 
 **题意**：判断括号字符串是否按正确类型和顺序闭合。
 
@@ -836,7 +865,7 @@ def is_valid(s):
 </details>
 
 <details>
-<summary><b>LC 155 — Min Stack｜Stack + Auxiliary Minimum｜P0</b></summary>
+<summary><b>LC 155 · Min Stack · Stack + Auxiliary Minimum · P0</b></summary>
 
 **题意**：实现栈，push/pop/top/getMin 都要求 O(1)。
 
@@ -867,7 +896,7 @@ class MinStack:
 </details>
 
 <details>
-<summary><b>LC 739 — Daily Temperatures｜Monotonic Stack｜P0</b></summary>
+<summary><b>LC 739 · Daily Temperatures · Monotonic Stack · P0</b></summary>
 
 **题意**：对每一天，求还要等多少天才出现更高温度；若以后没有则 0。
 
@@ -889,7 +918,7 @@ def daily_temperatures(temp):
 </details>
 
 <details>
-<summary><b>LC 84 — Largest Rectangle in Histogram｜Monotonic Stack｜P0</b></summary>
+<summary><b>LC 84 · Largest Rectangle in Histogram · Monotonic Stack · P0</b></summary>
 
 **题意**：柱状图中找最大矩形面积。
 
@@ -911,17 +940,23 @@ def largest_rectangle_area(heights):
 
 **复杂度**：O(n) / O(n)。
 
-**易错点**：宽度是 `i - stack[-1] - 1`，不是 `i-j`。
+**易错**：宽度是 `i - stack[-1] - 1`，不是 `i-j`。
 </details>
+
+### 这一类你应该会什么
+
+- Stack：嵌套 / 回退 / 最近未匹配；
+- Monotonic Stack：找左右第一个更大/更小；
+- Monotonic Queue：固定窗口最大/最小。
 
 ---
 
-# Part D：Binary Tree / BST
+# Part D · Binary Tree / BST
 
-## 9. 树题先定义“递归函数返回什么”
+## 6. 树题先定义“递归函数返回什么”
 
 <details>
-<summary><b>LC 104 — Maximum Depth of Binary Tree｜DFS Recursion｜P0</b></summary>
+<summary><b>LC 104 · Maximum Depth of Binary Tree · DFS Recursion · P0</b></summary>
 
 **题意**：求二叉树从根到最深叶子的节点层数。
 
@@ -938,7 +973,7 @@ def max_depth(root):
 </details>
 
 <details>
-<summary><b>LC 226 — Invert Binary Tree｜Tree Recursion｜P0</b></summary>
+<summary><b>LC 226 · Invert Binary Tree · Tree Recursion · P0</b></summary>
 
 **题意**：把每个节点的左右子树交换。
 
@@ -952,11 +987,11 @@ def invert_tree(root):
 
 **复杂度**：O(n) / O(h)。
 
-**易错点**：先想清楚当前函数的职责：“返回已经翻转好的子树”。
+**易错**：先想清楚当前函数的职责：“返回已经翻转好的子树”。
 </details>
 
 <details>
-<summary><b>LC 102 — Binary Tree Level Order Traversal｜BFS Queue｜P0</b></summary>
+<summary><b>LC 102 · Binary Tree Level Order Traversal · BFS Queue · P0</b></summary>
 
 **题意**：按层输出二叉树节点值。
 
@@ -984,11 +1019,11 @@ def level_order(root):
 
 **复杂度**：O(n) 时间，O(w) 队列空间。
 
-**迁移**：BFS、worker queue、层级依赖遍历。
+**工程迁移**：BFS、worker queue、层级依赖遍历。
 </details>
 
 <details>
-<summary><b>LC 543 — Diameter of Binary Tree｜Postorder DFS｜P0</b></summary>
+<summary><b>LC 543 · Diameter of Binary Tree · Postorder DFS · P0</b></summary>
 
 **题意**：求树中任意两节点间最长路径的边数。
 
@@ -1017,7 +1052,7 @@ def diameter_of_binary_tree(root):
 </details>
 
 <details>
-<summary><b>LC 98 — Validate Binary Search Tree｜Bounds / Inorder｜P0</b></summary>
+<summary><b>LC 98 · Validate Binary Search Tree · Bounds / Inorder · P0</b></summary>
 
 **题意**：判断树是否满足 BST：左子树所有值小于当前，右子树所有值大于当前。
 
@@ -1035,11 +1070,11 @@ def is_valid_bst(root):
 
 **复杂度**：O(n) / O(h)。
 
-**易错点**：只比较“节点与直接孩子”不够，因为约束来自所有祖先。
+**易错**：只比较“节点与直接孩子”不够，因为约束来自所有祖先。
 </details>
 
 <details>
-<summary><b>LC 230 — Kth Smallest Element in a BST｜Inorder｜P0</b></summary>
+<summary><b>LC 230 · Kth Smallest Element in a BST · Inorder · P0</b></summary>
 
 **题意**：BST 中找第 k 小元素。
 
@@ -1066,7 +1101,7 @@ def kth_smallest(root, k):
 </details>
 
 <details>
-<summary><b>LC 236 — Lowest Common Ancestor of a Binary Tree｜Postorder Recursion｜P0</b></summary>
+<summary><b>LC 236 · Lowest Common Ancestor of a Binary Tree · Postorder · P0</b></summary>
 
 **题意**：普通二叉树中找两个节点的最低公共祖先。
 
@@ -1087,7 +1122,7 @@ def lowest_common_ancestor(root, p, q):
 </details>
 
 <details>
-<summary><b>LC 105 — Construct Binary Tree from Preorder and Inorder｜Recursion + Hash｜P0</b></summary>
+<summary><b>LC 105 · Construct Binary Tree from Preorder and Inorder · Recursion + Hash · P0</b></summary>
 
 **题意**：已知前序与中序遍历且节点值唯一，重建二叉树。
 
@@ -1115,15 +1150,21 @@ def build_tree(preorder, inorder):
 
 **复杂度**：O(n) 时间，O(n) 哈希 + 递归栈。
 
-**易错点**：如果每次用 `inorder.index`，会退化到 O(n²)。
+**易错**：如果每次用 `inorder.index`，会退化到 O(n²)。
 </details>
+
+### 这一类你应该会什么
+
+- 递归函数定义、前/中/后序；
+- BFS 分层；
+- BST 的全局上下界，不只看父子关系。
 
 ---
 
-# Part E：Heap / Binary Search
+# Part E · Heap / Binary Search
 
 <details>
-<summary><b>LC 215 — Kth Largest Element in an Array｜Heap｜P0</b></summary>
+<summary><b>LC 215 · Kth Largest Element in an Array · Heap · P0</b></summary>
 
 **题意**：找数组第 k 大，不要求去重。
 
@@ -1148,7 +1189,7 @@ def find_kth_largest(nums, k):
 </details>
 
 <details>
-<summary><b>LC 23 — Merge k Sorted Lists｜Heap + Linked List｜P0</b></summary>
+<summary><b>LC 23 · Merge k Sorted Lists · Heap + Linked List · P0</b></summary>
 
 **题意**：合并 k 条升序链表。
 
@@ -1176,11 +1217,11 @@ def merge_k_lists(lists):
 
 **复杂度**：总 N 个节点，O(N log k)；堆 O(k)。
 
-**易错点**：Python 元组前两项相等时会比较 node，需要 tie-break counter。
+**易错**：Python 元组前两项相等时会比较 node，需要 tie-break counter。
 </details>
 
 <details>
-<summary><b>LC 295 — Find Median from Data Stream｜Two Heaps｜P1</b></summary>
+<summary><b>LC 295 · Find Median from Data Stream · Two Heaps · P1</b></summary>
 
 **题意**：不断加入数字，并随时返回当前中位数。
 
@@ -1211,7 +1252,7 @@ class MedianFinder:
 </details>
 
 <details>
-<summary><b>LC 704 — Binary Search｜Binary Search｜P0</b></summary>
+<summary><b>LC 704 · Binary Search · Binary Search · P0</b></summary>
 
 **题意**：升序数组中查找目标值下标，不存在返回 -1。
 
@@ -1235,7 +1276,7 @@ def binary_search(nums, target):
 </details>
 
 <details>
-<summary><b>LC 33 — Search in Rotated Sorted Array｜Binary Search｜P0</b></summary>
+<summary><b>LC 33 · Search in Rotated Sorted Array · Binary Search · P0</b></summary>
 
 **题意**：原本升序数组在某处旋转，元素不重复；查目标值。
 
@@ -1265,7 +1306,7 @@ def search_rotated(nums, target):
 </details>
 
 <details>
-<summary><b>LC 34 — Find First and Last Position｜Lower Bound｜P0</b></summary>
+<summary><b>LC 34 · Find First and Last Position · Lower Bound · P0</b></summary>
 
 **题意**：升序数组中返回 target 的起止下标，不存在则 `[-1,-1]`。
 
@@ -1294,7 +1335,7 @@ def search_range(nums, target):
 </details>
 
 <details>
-<summary><b>LC 153 — Find Minimum in Rotated Sorted Array｜Binary Search｜P0</b></summary>
+<summary><b>LC 153 · Find Minimum in Rotated Sorted Array · Binary Search · P0</b></summary>
 
 **题意**：无重复升序数组旋转后，找最小值。
 
@@ -1316,14 +1357,13 @@ def find_min(nums):
 </details>
 
 <details>
-<summary><b>LC 875 — Koko Eating Bananas｜Binary Search on Answer｜P1</b></summary>
+<summary><b>LC 875 · Koko Eating Bananas · Binary Search on Answer · P1</b></summary>
 
 **题意**：给若干堆香蕉与总小时数 h，找最小整数速度 k，使按该速度逐堆吃完不超时。
 
 **识别信号**：答案是一个数；给定候选 k 可以 O(n) 判断可不可行；可行性对 k 单调。
 
 ```python
-
 def min_eating_speed(piles, h):
     def feasible(k):
         return sum((p + k - 1) // k for p in piles) <= h
@@ -1340,15 +1380,21 @@ def min_eating_speed(piles, h):
 
 **复杂度**：O(n log max(piles))。
 
-**迁移**：吞吐量、worker 数、最小容量等“答案单调”的系统参数问题。
+**工程迁移**：吞吐量、worker 数、最小容量等“答案单调”的系统参数问题。
 </details>
+
+### 这一类你应该会什么
+
+- TopK 用大小 K 的小顶堆；
+- lower_bound / upper_bound；
+- “给定答案可以判断可行 + 单调”时想到二分答案。
 
 ---
 
-# Part F：Graph / Topological / Union Find
+# Part F · Graph / Topological / Union Find
 
 <details>
-<summary><b>LC 200 — Number of Islands｜Grid DFS/BFS｜P0</b></summary>
+<summary><b>LC 200 · Number of Islands · Grid DFS/BFS · P0</b></summary>
 
 **题意**：0/1 网格中，上下左右连接的 1 算同一岛屿，统计岛屿数量。
 
@@ -1382,7 +1428,7 @@ def num_islands(grid):
 </details>
 
 <details>
-<summary><b>LC 994 — Rotting Oranges｜Multi-source BFS｜P0</b></summary>
+<summary><b>LC 994 · Rotting Oranges · Multi-source BFS · P0</b></summary>
 
 **题意**：腐烂橘子每分钟让四邻新鲜橘子腐烂，问全部腐烂所需最少分钟；若无法完成返回 -1。
 
@@ -1402,11 +1448,11 @@ def oranges_rotting(grid):
                 fresh += 1
 
     minutes = 0
-    for_dr = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+    directions = [(1, 0), (-1, 0), (0, 1), (0, -1)]
     while q:
         r, c, t = q.popleft()
         minutes = max(minutes, t)
-        for dr, dc in for_dr:
+        for dr, dc in directions:
             nr, nc = r + dr, c + dc
             if 0 <= nr < m and 0 <= nc < n and grid[nr][nc] == 1:
                 grid[nr][nc] = 2
@@ -1419,7 +1465,7 @@ def oranges_rotting(grid):
 </details>
 
 <details>
-<summary><b>LC 133 — Clone Graph｜DFS/BFS + Hash｜P0</b></summary>
+<summary><b>LC 133 · Clone Graph · DFS/BFS + Hash · P0</b></summary>
 
 **题意**：深拷贝一个可能有环的无向图。
 
@@ -1442,11 +1488,11 @@ def clone_graph(node):
 
 **复杂度**：O(V+E)。
 
-**易错点**：必须“先放入 copied 再递归邻居”，否则遇环无限递归。
+**易错**：必须“先放入 copied 再递归邻居”，否则遇环无限递归。
 </details>
 
 <details>
-<summary><b>LC 127 — Word Ladder｜BFS Shortest Path｜P1</b></summary>
+<summary><b>LC 127 · Word Ladder · BFS Shortest Path · P1</b></summary>
 
 **题意**：每次只改一个字母，并且中间词必须在词典里；求从 begin 到 end 的最少单词数量。
 
@@ -1466,7 +1512,7 @@ def ladder_length(begin, end, words):
             return dist
         chars = list(word)
         for i, old in enumerate(chars):
-            for code in range(ord('a'), ord('z') + 1):
+            for code in range(ord("a"), ord("z") + 1):
                 ch = chr(code)
                 if ch == old:
                     continue
@@ -1485,7 +1531,7 @@ def ladder_length(begin, end, words):
 </details>
 
 <details>
-<summary><b>LC 207 — Course Schedule｜Topological Sort｜P0</b></summary>
+<summary><b>LC 207 · Course Schedule · Topological Sort · P0</b></summary>
 
 **题意**：课程之间有先修依赖，判断是否能完成全部课程，即依赖图是否无环。
 
@@ -1518,7 +1564,7 @@ def can_finish(num_courses, prerequisites):
 </details>
 
 <details>
-<summary><b>LC 210 — Course Schedule II｜Topological Ordering｜P0</b></summary>
+<summary><b>LC 210 · Course Schedule II · Topological Ordering · P0</b></summary>
 
 **题意**：与 207 相同，但若可完成，要返回一种合法执行顺序。
 
@@ -1548,7 +1594,7 @@ def find_order(num_courses, prerequisites):
 </details>
 
 <details>
-<summary><b>LC 547 — Number of Provinces｜Union Find / DFS｜P1</b></summary>
+<summary><b>LC 547 · Number of Provinces · Union Find / DFS · P1</b></summary>
 
 **题意**：城市连接矩阵中，统计连通分量数量。
 
@@ -1579,7 +1625,7 @@ def find_circle_num(is_connected):
 </details>
 
 <details>
-<summary><b>LC 684 — Redundant Connection｜Union Find｜P1</b></summary>
+<summary><b>LC 684 · Redundant Connection · Union Find · P1</b></summary>
 
 **题意**：一棵树多出一条边；返回那条导致成环的边。
 
@@ -1605,7 +1651,7 @@ def find_redundant_connection(edges):
 </details>
 
 <details>
-<summary><b>LC 721 — Accounts Merge｜Union Find + Hash｜P1</b></summary>
+<summary><b>LC 721 · Accounts Merge · Union Find + Hash · P1</b></summary>
 
 **题意**：账户包含姓名和多个邮箱；共享任一邮箱的账户属于同一人，合并邮箱集合。
 
@@ -1645,14 +1691,21 @@ def accounts_merge(accounts):
 **工程迁移**：实体归并 / identity resolution。
 </details>
 
+### 这一类你应该会什么
+
+- DFS/BFS 连通块；
+- BFS 无权最短路、多源 BFS；
+- Topological Sort 处理有向依赖；
+- Union Find 处理动态连通与成环。
+
 ---
 
-# Part G：Backtracking
+# Part G · Backtracking
 
-## 10. 回溯的统一模板：选择 → 递归 → 撤销
+## 7. 统一模板 · 选择 → 递归 → 撤销
 
 <details>
-<summary><b>LC 78 — Subsets｜Backtracking｜P0</b></summary>
+<summary><b>LC 78 · Subsets · Backtracking · P0</b></summary>
 
 **题意**：给无重复元素数组，返回所有子集。
 
@@ -1677,7 +1730,7 @@ def subsets(nums):
 </details>
 
 <details>
-<summary><b>LC 46 — Permutations｜Backtracking｜P0</b></summary>
+<summary><b>LC 46 · Permutations · Backtracking · P0</b></summary>
 
 **题意**：返回无重复数组的所有排列。
 
@@ -1709,7 +1762,7 @@ def permute(nums):
 </details>
 
 <details>
-<summary><b>LC 39 — Combination Sum｜Backtracking｜P0</b></summary>
+<summary><b>LC 39 · Combination Sum · Backtracking · P0</b></summary>
 
 **题意**：正整数候选可重复使用，找所有和等于 target 的组合，组合顺序不计。
 
@@ -1740,7 +1793,7 @@ def combination_sum(candidates, target):
 </details>
 
 <details>
-<summary><b>LC 22 — Generate Parentheses｜Backtracking + Constraint｜P0</b></summary>
+<summary><b>LC 22 · Generate Parentheses · Backtracking + Constraint · P0</b></summary>
 
 **题意**：生成 n 对合法括号的所有字符串。
 
@@ -1771,7 +1824,7 @@ def generate_parenthesis(n):
 </details>
 
 <details>
-<summary><b>LC 79 — Word Search｜Grid Backtracking｜P0</b></summary>
+<summary><b>LC 79 · Word Search · Grid Backtracking · P0</b></summary>
 
 **题意**：网格中能否沿上下左右相邻格子依次拼出给定单词，每个格子一次路径中只能用一次。
 
@@ -1800,15 +1853,15 @@ def exist(board, word):
 
 **复杂度**：最坏约 O(mn * 4^L)。
 
-**易错点**：搜索后必须恢复 board，除非立即结束且确认没有后续复用。
+**易错**：搜索后必须恢复 board，除非立即结束且确认没有后续复用。
 </details>
 
 ---
 
-# Part H：Greedy / Interval
+# Part H · Greedy / Interval
 
 <details>
-<summary><b>LC 55 — Jump Game｜Greedy Reachability｜P0</b></summary>
+<summary><b>LC 55 · Jump Game · Greedy Reachability · P0</b></summary>
 
 **题意**：每个位置给最大可跳距离，判断能否到最后一个位置。
 
@@ -1828,7 +1881,7 @@ def can_jump(nums):
 </details>
 
 <details>
-<summary><b>LC 121 — Best Time to Buy and Sell Stock｜Greedy / DP｜P0</b></summary>
+<summary><b>LC 121 · Best Time to Buy and Sell Stock · Greedy / DP · P0</b></summary>
 
 **题意**：只能买一次卖一次，卖必须在买后；求最大利润。
 
@@ -1848,7 +1901,7 @@ def max_profit(prices):
 </details>
 
 <details>
-<summary><b>LC 122 — Best Time to Buy and Sell Stock II｜Greedy｜P1</b></summary>
+<summary><b>LC 122 · Best Time to Buy and Sell Stock II · Greedy · P1</b></summary>
 
 **题意**：可以完成多次交易，但同一时刻只能持有一股，求最大利润。
 
@@ -1863,7 +1916,7 @@ def max_profit_many(prices):
 </details>
 
 <details>
-<summary><b>LC 763 — Partition Labels｜Greedy｜P0</b></summary>
+<summary><b>LC 763 · Partition Labels · Greedy · P0</b></summary>
 
 **题意**：把字符串切成尽量多段，使每个字符只出现在其中一段；返回各段长度。
 
@@ -1884,7 +1937,7 @@ def partition_labels(s):
 </details>
 
 <details>
-<summary><b>LC 56 — Merge Intervals｜Sort + Greedy｜P0</b></summary>
+<summary><b>LC 56 · Merge Intervals · Sort + Greedy · P0</b></summary>
 
 **题意**：合并所有相交区间。
 
@@ -1906,7 +1959,7 @@ def merge_intervals(intervals):
 </details>
 
 <details>
-<summary><b>LC 57 — Insert Interval｜Interval Merge｜P1</b></summary>
+<summary><b>LC 57 · Insert Interval · Interval Merge · P1</b></summary>
 
 **题意**：已有互不重叠且按起点排序的区间，插入一个新区间并合并重叠。
 
@@ -1933,7 +1986,7 @@ def insert_interval(intervals, new_interval):
 </details>
 
 <details>
-<summary><b>LC 435 — Non-overlapping Intervals｜Greedy by End Time｜P1</b></summary>
+<summary><b>LC 435 · Non-overlapping Intervals · Greedy by End Time · P1</b></summary>
 
 **题意**：最少删除多少区间，才能让剩余区间互不重叠。
 
@@ -1956,9 +2009,9 @@ def erase_overlap_intervals(intervals):
 
 ---
 
-# Part I：Dynamic Programming
+# Part I · Dynamic Programming
 
-## 11. DP 四问
+## 8. DP 四问
 
 ```text
 1. dp[i] / dp[i][j] 到底表示什么？
@@ -1968,7 +2021,7 @@ def erase_overlap_intervals(intervals):
 ```
 
 <details>
-<summary><b>LC 70 — Climbing Stairs｜1D DP｜P0</b></summary>
+<summary><b>LC 70 · Climbing Stairs · 1D DP · P0</b></summary>
 
 **题意**：每次走 1 或 2 级台阶，走到第 n 级有多少种不同方法。
 
@@ -1988,7 +2041,7 @@ def climb_stairs(n):
 </details>
 
 <details>
-<summary><b>LC 198 — House Robber｜1D DP｜P0</b></summary>
+<summary><b>LC 198 · House Robber · 1D DP · P0</b></summary>
 
 **题意**：一排房屋，不能偷相邻两家，求最大金额。
 
@@ -2006,7 +2059,7 @@ def rob(nums):
 </details>
 
 <details>
-<summary><b>LC 322 — Coin Change｜Unbounded Knapsack DP｜P0</b></summary>
+<summary><b>LC 322 · Coin Change · Unbounded Knapsack DP · P0</b></summary>
 
 **题意**：给若干硬币面额，每种可无限使用；凑出 amount 所需最少硬币数，不可达返回 -1。
 
@@ -2024,11 +2077,11 @@ def coin_change(coins, amount):
 
 **复杂度**：O(amount * len(coins))。
 
-**易错点**：这是“最少数量”，不是“组合数量”，状态和初始化不同。
+**易错**：这是“最少数量”，不是“组合数量”，状态和初始化不同。
 </details>
 
 <details>
-<summary><b>LC 300 — Longest Increasing Subsequence｜DP / Binary Search｜P0</b></summary>
+<summary><b>LC 300 · Longest Increasing Subsequence · DP / Binary Search · P0</b></summary>
 
 **题意**：求最长严格递增子序列长度，元素不要求连续。
 
@@ -2055,7 +2108,7 @@ def length_of_lis(nums):
 </details>
 
 <details>
-<summary><b>LC 1143 — Longest Common Subsequence｜2D DP｜P0</b></summary>
+<summary><b>LC 1143 · Longest Common Subsequence · 2D DP · P0</b></summary>
 
 **题意**：两个字符串中，求最长公共子序列长度；字符顺序保持但不要求连续。
 
@@ -2078,7 +2131,7 @@ def longest_common_subsequence(a, b):
 </details>
 
 <details>
-<summary><b>LC 72 — Edit Distance｜2D DP｜P0</b></summary>
+<summary><b>LC 72 · Edit Distance · 2D DP · P0</b></summary>
 
 **题意**：把字符串 a 转成 b，允许插入、删除、替换，每次成本 1，求最少操作数。
 
@@ -2096,20 +2149,20 @@ def min_distance(a, b):
                 dp[i][j] = dp[i - 1][j - 1]
             else:
                 dp[i][j] = 1 + min(
-                    dp[i - 1][j],      # delete
-                    dp[i][j - 1],      # insert
-                    dp[i - 1][j - 1],  # replace
+                    dp[i - 1][j],
+                    dp[i][j - 1],
+                    dp[i - 1][j - 1],
                 )
     return dp[m][n]
 ```
 
 **复杂度**：O(mn) / O(mn)。
 
-**面试重点**：必须能解释三个转移分别对应什么操作。
+**面试重点**：必须能解释删除、插入、替换三个转移分别对应什么。
 </details>
 
 <details>
-<summary><b>LC 416 — Partition Equal Subset Sum｜0/1 Knapsack｜P0</b></summary>
+<summary><b>LC 416 · Partition Equal Subset Sum · 0/1 Knapsack · P0</b></summary>
 
 **题意**：能否把正整数数组分成两组，使两组和相等。
 
@@ -2131,11 +2184,11 @@ def can_partition(nums):
 
 **复杂度**：O(n*target) / O(target)。
 
-**易错点**：0/1 背包一维优化时必须倒序遍历，否则一个元素会被重复使用。
+**易错**：0/1 背包一维优化时必须倒序遍历，否则一个元素会被重复使用。
 </details>
 
 <details>
-<summary><b>LC 309 — Best Time to Buy and Sell Stock with Cooldown｜State Machine DP｜P1</b></summary>
+<summary><b>LC 309 · Stock with Cooldown · State Machine DP · P1</b></summary>
 
 **题意**：可多次交易，但卖出后下一天不能立即买入，求最大利润。
 
@@ -2156,15 +2209,21 @@ def max_profit_cooldown(prices):
 
 **复杂度**：O(n) / O(1)。
 
-**迁移**：状态机 DP 与 Agent state machine 的共同点是“显式状态 + 合法转移”，但两者目的不同。
+**工程迁移**：状态机 DP 与 Agent state machine 都依赖“显式状态 + 合法转移”，但解决的问题不同。
 </details>
+
+### 这一类你应该会什么
+
+- 先定义状态，再写转移；
+- 区分 0/1 背包与完全背包；
+- 能从二维 DP 写到空间优化，而不是一开始死背压缩代码。
 
 ---
 
-# Part J：Trie / LRU
+# Part J · Trie / LRU
 
 <details>
-<summary><b>LC 208 — Implement Trie｜Trie｜P1</b></summary>
+<summary><b>LC 208 · Implement Trie · Trie · P1</b></summary>
 
 **题意**：实现字符串前缀树，支持插入、完整单词查询、前缀查询。
 
@@ -2208,7 +2267,7 @@ class Trie:
 </details>
 
 <details>
-<summary><b>LC 211 — Design Add and Search Words｜Trie + DFS｜P1</b></summary>
+<summary><b>LC 211 · Design Add and Search Words · Trie + DFS · P1</b></summary>
 
 **题意**：字典支持添加单词；查询时 `.` 可匹配任意一个字符。
 
@@ -2240,9 +2299,18 @@ class WordDictionary:
 </details>
 
 <details>
-<summary><b>LC 146 — LRU Cache｜HashMap + Doubly Linked List｜P0</b></summary>
+<summary><b>LC 146 · LRU Cache · HashMap + Doubly Linked List · P0</b></summary>
 
 **题意**：实现固定容量缓存，`get/put` 都 O(1)；容量满时淘汰最久未使用项。
+
+```mermaid
+flowchart LR
+    MAP[HashMap key → node] -.定位.-> C[C]
+    H[HEAD newest] <--> A[A]
+    A <--> C
+    C <--> B[B]
+    B <--> T[TAIL oldest]
+```
 
 ```python
 class _Node:
@@ -2257,8 +2325,8 @@ class LRUCache:
     def __init__(self, capacity):
         self.capacity = capacity
         self.map = {}
-        self.head = _Node()  # newest side
-        self.tail = _Node()  # oldest side
+        self.head = _Node()
+        self.tail = _Node()
         self.head.next = self.tail
         self.tail.prev = self.head
 
@@ -2306,9 +2374,9 @@ class LRUCache:
 
 ---
 
-# Part K：补充必会实现（非单一 LeetCode 题）
+# Part K · 补充必会实现
 
-## 12. Quick Sort
+## Quick Sort
 
 ```python
 def quick_sort(nums):
@@ -2335,7 +2403,7 @@ def quick_sort(nums):
 
 平均 O(n log n)，最坏 O(n²)。面试必须解释 pivot 选择与最坏情况。
 
-## 13. Merge Sort
+## Merge Sort
 
 ```python
 def merge_sort(nums):
@@ -2348,15 +2416,17 @@ def merge_sort(nums):
     i = j = 0
     while i < len(left) and j < len(right):
         if left[i] <= right[j]:
-            ans.append(left[i]); i += 1
+            ans.append(left[i])
+            i += 1
         else:
-            ans.append(right[j]); j += 1
+            ans.append(right[j])
+            j += 1
     return ans + left[i:] + right[j:]
 ```
 
 稳定排序，O(n log n) 时间，O(n) 额外空间。
 
-## 14. Dijkstra 最短路
+## Dijkstra 最短路
 
 **适用**：非负边权图的单源最短路。
 
@@ -2365,7 +2435,6 @@ import heapq
 
 
 def dijkstra(graph, start):
-    # graph[u] = [(v, weight), ...]
     dist = {start: 0}
     heap = [(0, start)]
     while heap:
@@ -2382,9 +2451,9 @@ def dijkstra(graph, start):
 
 **复杂度**：邻接表 + 二叉堆约 O((V+E) log V)。
 
-**易错点**：有负边时不能直接用标准 Dijkstra。
+**易错**：有负边时不能直接用标准 Dijkstra。
 
-## 15. Difference Array
+## Difference Array
 
 适合“很多次区间加值，最后一次性求结果”。
 
@@ -2407,9 +2476,9 @@ def range_add(n, operations):
 
 ---
 
-# Part L：ACM 输入输出
+# Part L · ACM 输入输出
 
-## 16. 为什么必须练
+## 为什么必须练
 
 LeetCode 通常只让你写函数；国内笔试常要求完整 stdin/stdout。
 
@@ -2444,11 +2513,11 @@ for _ in range(t):
     print(sum(nums))
 ```
 
-训练时至少把：Two Sum、Merge Intervals、TopK、BFS、DP 各改写一次 ACM 完整程序。
+训练时至少把 Two Sum、Merge Intervals、TopK、BFS、DP 各改写一次 ACM 完整程序。
 
 ---
 
-# Part M：SQL 自包含练习
+# Part M · SQL 自包含练习
 
 假设表：
 
@@ -2457,7 +2526,7 @@ users(id, name, dept_id)
 orders(id, user_id, amount, created_at)
 ```
 
-## 17. JOIN：查用户及订单
+## JOIN · 查用户及订单
 
 ```sql
 SELECT u.id, u.name, o.id AS order_id, o.amount
@@ -2467,7 +2536,7 @@ LEFT JOIN orders o ON o.user_id = u.id;
 
 **追问**：LEFT JOIN 与 INNER JOIN 区别？没有订单的用户是否保留？
 
-## 18. GROUP BY：每个用户总消费
+## GROUP BY · 每个用户总消费
 
 ```sql
 SELECT user_id, SUM(amount) AS total_amount
@@ -2475,7 +2544,7 @@ FROM orders
 GROUP BY user_id;
 ```
 
-## 19. HAVING：总消费超过 1000 的用户
+## HAVING · 总消费超过 1000 的用户
 
 ```sql
 SELECT user_id, SUM(amount) AS total_amount
@@ -2486,7 +2555,7 @@ HAVING SUM(amount) > 1000;
 
 `WHERE` 在分组前过滤行，`HAVING` 在分组后过滤聚合结果。
 
-## 20. Window：每个用户金额最高的 3 笔订单
+## Window · 每个用户金额最高的 3 笔订单
 
 ```sql
 WITH ranked AS (
@@ -2505,7 +2574,7 @@ WHERE rn <= 3;
 
 必须区分 `ROW_NUMBER / RANK / DENSE_RANK`。
 
-## 21. SQL 面试继续追问
+## SQL 面试继续追问
 
 必须能解释：
 
@@ -2522,9 +2591,9 @@ WHERE rn <= 3;
 
 ---
 
-# Part N：Backend 手撕题（带答案）
+# Part N · Backend 手撕题
 
-## 22. Sliding Window Rate Limiter
+## Sliding Window Rate Limiter
 
 **题目**：单机服务限制“任意连续 60 秒最多 100 次请求”。
 
@@ -2554,7 +2623,7 @@ class SlidingWindowLimiter:
 
 **追问**：线程安全？多进程？多机？Redis ZSET？为什么 sliding log 内存可能大？
 
-## 23. Token Bucket
+## Token Bucket
 
 ```python
 import time
@@ -2580,7 +2649,7 @@ class TokenBucket:
 
 **必须解释**：capacity 控制 burst；refill_rate 控制长期平均速率。
 
-## 24. Retry with Exponential Backoff + Jitter
+## Retry with Exponential Backoff + Jitter
 
 ```python
 import random
@@ -2604,7 +2673,7 @@ def retry(fn, *, attempts=4, base_delay=0.2, retryable=(TimeoutError,)):
 
 **追问**：401 为什么一般不重试？429 如何尊重 Retry-After？写操作为什么必须考虑幂等？
 
-## 25. TTL Cache
+## TTL Cache
 
 ```python
 import time
@@ -2630,7 +2699,7 @@ class TTLCache:
 
 **追问**：如何避免过期 key 长期占内存？主动过期 vs 惰性过期。
 
-## 26. Producer / Consumer + Bounded Queue
+## Producer / Consumer + Bounded Queue
 
 ```python
 from queue import Queue
@@ -2655,7 +2724,7 @@ thread.start()
 
 **必须理解**：bounded queue、backpressure、duplicate、retry、idempotency、shutdown。
 
-## 27. Semaphore Concurrency Limit
+## Semaphore Concurrency Limit
 
 ```python
 import asyncio
@@ -2674,9 +2743,9 @@ class AsyncLimiter:
 
 ---
 
-# Part O：AI Coding 必会小题
+# Part O · AI Coding 必会小题
 
-## 28. FastAPI + Pydantic Endpoint
+## FastAPI + Pydantic Endpoint
 
 ```python
 from fastapi import FastAPI
@@ -2703,7 +2772,7 @@ def ask(req: AskRequest):
 
 面试继续补：timeout、鉴权、错误映射、request id、structured output。
 
-## 29. SSE 最小结构
+## SSE 最小结构
 
 ```python
 import asyncio
@@ -2724,95 +2793,57 @@ async def stream():
 
 必须解释：客户端断开、取消、错误事件、SSE vs WebSocket。
 
-## 30. Tool Calling Loop 最小安全要求
+## Tool Calling Loop · 最小安全要求
 
-```text
-Question
-→ Model structured decision
-→ allowlisted Tool Registry
-→ schema validation
-→ timeout
-→ observation
-→ next decision
-→ max steps
-→ final answer
+```mermaid
+flowchart TD
+    Q[Question] --> D[Model decision]
+    D -->|final| F[Answer]
+    D -->|tool| REG[Allowlisted Registry]
+    REG --> VAL[Schema validation]
+    VAL --> EXEC[Execute with timeout]
+    EXEC --> OBS[Observation]
+    OBS --> D
 ```
+
+必须包括：allowlist、schema validation、timeout、error taxonomy、max steps。
 
 当前项目完整示例：`src/rag_agent/agent/tooling.py`。学习时先自己写简化版，再对照项目实现。
 
-必须能主动制造：
-
-- unknown tool；
-- invalid arguments；
-- timeout；
-- execution error；
-- step limit。
+主动制造：unknown tool、invalid arguments、timeout、execution error、step limit。
 
 ---
 
-# Part P：12 周学习计划
+# Part P · 12 周训练计划
 
-## Week 1 — Hash + Two Pointers
-
-目标：LC 1 / 49 / 128 / 283 / 11 / 15 / 42。
-
-## Week 2 — Window + Prefix
-
-目标：LC 3 / 438 / 76 / 239 / 560 / 238；附加写 SlidingWindowLimiter。
-
-## Week 3 — Linked List
-
-目标：206 / 21 / 141 / 160 / 19 / 2 / 25 / 138 / 146。
-
-## Week 4 — Stack + Tree
-
-目标：20 / 155 / 739 / 84 / 104 / 226 / 102 / 543。
-
-## Week 5 — BST + Heap + Binary Search
-
-目标：98 / 230 / 236 / 105 / 215 / 23 / 295 / 704 / 33 / 34 / 153 / 875。
-
-## Week 6 — Graph
-
-目标：200 / 994 / 133 / 127 / 207 / 210 / 547 / 684 / 721。
-
-## Week 7 — Backtracking + Greedy
-
-目标：78 / 46 / 39 / 22 / 79 / 55 / 121 / 122 / 763。
-
-## Week 8 — DP + Interval
-
-目标：56 / 57 / 435 / 70 / 198 / 322 / 300 / 1143 / 72 / 416 / 309。
-
-## Week 9 — Trie + Sorting + Dijkstra + ACM
-
-目标：208 / 211；Quick/Merge/Dijkstra；至少 5 题改成 ACM 模式。
-
-## Week 10 — SQL + Backend Coding
-
-Join、Window、TopN、LRU、Limiter、TokenBucket、Retry、Queue、TTL Cache。
-
-## Week 11 — AI Coding
-
-FastAPI、SSE、Tool Calling Loop、Simple RAG、Conversation State。
-
-## Week 12 — 模拟面试
-
-每次 60–90 分钟：
-
-1. 1 道 P0 算法；
-2. 1 道 SQL；
-3. 1 个 Backend 手撕；
-4. 1 个 Agent/RAG System Design；
-5. 复盘项目代码。
+| 周 | 主线 | 必做 |
+|---|---|---|
+| 1 | Hash + Two Pointers | 1 / 49 / 128 / 283 / 11 / 15 / 42 |
+| 2 | Window + Prefix | 3 / 438 / 76 / 239 / 560 / 238 + SlidingWindowLimiter |
+| 3 | Linked List | 206 / 21 / 141 / 160 / 19 / 2 / 25 / 138 / 146 |
+| 4 | Stack + Tree | 20 / 155 / 739 / 84 / 104 / 226 / 102 / 543 |
+| 5 | BST + Heap + Binary | 98 / 230 / 236 / 105 / 215 / 23 / 295 / 704 / 33 / 34 / 153 / 875 |
+| 6 | Graph | 200 / 994 / 133 / 127 / 207 / 210 / 547 / 684 / 721 |
+| 7 | Backtracking + Greedy | 78 / 46 / 39 / 22 / 79 / 55 / 121 / 122 / 763 |
+| 8 | DP + Interval | 56 / 57 / 435 / 70 / 198 / 322 / 300 / 1143 / 72 / 416 / 309 |
+| 9 | Trie + Sorting + Dijkstra + ACM | 208 / 211 + Quick/Merge/Dijkstra + 5 题 ACM |
+| 10 | SQL + Backend Coding | Join / Window / TopN / LRU / Limiter / Retry / Queue |
+| 11 | AI Coding | FastAPI / SSE / Tool Loop / Simple RAG / State |
+| 12 | 模拟面试 | 算法 + SQL + Backend 手撕 + Agent System Design |
 
 ---
 
-# Part Q：复习与验收
+# Part Q · 复习与验收
 
-## Day 0 / 1 / 3 / 7 / 14
+## 间隔复习
 
-同一题按间隔重复。
+```text
+Day 0 学会
+Day 1 复写
+Day 3 复写
+Day 7 复写
+Day 14 再测
+```
 
 如果 Day 7 不能从空白写，不能继续标 D。
 
@@ -2843,3 +2874,28 @@ FastAPI、SSE、Tool Calling Loop、Simple RAG、Conversation State。
 12. 如何把算法题里的 Sliding Window 迁移成限流器？
 
 如果这些问题只能背句子而不能写代码和举反例，就回到对应章节继续练。
+
+---
+
+# Appendix · GitHub 参考项目与维护规则
+
+本轮实际比较了这些公开仓库的组织方式：
+
+| 仓库 | 借鉴点 |
+|---|---|
+| `labuladong/fucking-algorithm` | 算法思维和套路优先于代码数量；同类题举一反三 |
+| `doocs/leetcode` | 覆盖面大；按算法专题和题号都能检索 |
+| `Hubert-hwk/hot100-judge` | Hot100 + CodeTop 高频；ACM/核心代码双模式；本地测试和进度追踪 |
+| `leetcode-go/top-interview-150` | 数组、双指针、哈希、链表、树、图等专题化面试组织 |
+
+本项目吸收的是**教学结构**，不是复制内容。
+
+根目录 `AGENTS.md` 规定：以后 Codex 在本地 GitHub CLI 可用时，先运行：
+
+```bash
+gh api --paginate user/starred --jq '.[].full_name'
+```
+
+把你本人 star 的 LeetCode / Hot100 / CodeTop / algorithms 仓库纳入参考。
+
+当前 ChatGPT GitHub 连接没有暴露 starred-repositories 列表，因此本轮没有假装读取你的个人 Stars。Codex 本地接手时必须补这一步。
