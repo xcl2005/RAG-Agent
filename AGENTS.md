@@ -49,35 +49,9 @@ Also sample current internship/graduate roles separately from experienced-hire r
 
 ## 2. Required hiring-scan output
 
-Update `docs/JOB_SKILLS.md` when material changes are found. Record:
+Update `docs/JOB_SKILLS.md` when material changes are found. Record source URL, date, company/role, level, education/experience, written skills, and role bucket.
 
-- source URL
-- access/update date when available
-- company and role family
-- internship / graduate / experienced hire
-- minimum education / experience when stated
-- skills actually written in the posting
-- role bucket: application/backend, runtime/infra, full-stack/applied, algorithm/research
-
-Then maintain a de-duplicated capability matrix. At minimum cover:
-
-### Programming / CS
-Python, Go, Java, C/C++, data structures, algorithms, OS, networking, Linux, databases, system design.
-
-### Backend
-API, FastAPI/Spring/Node where relevant, async/concurrency, SSE/WebSocket/RPC, SQL/PostgreSQL/MySQL, Redis/cache, MQ/worker/task queue, idempotency, retry, timeout, rate limit, fallback/circuit breaker, high availability, high concurrency, microservices/distributed systems.
-
-### RAG / Context
-parsing, chunking, embedding, sparse/dense/hybrid retrieval, RRF, reranking, query rewrite, metadata, context selection/compression, grounding, citation, refusal, retrieval/end-to-end evaluation.
-
-### Agent
-Tool/Function Calling, Tool Registry, schema/argument validation, ReAct/planning/workflow, state/checkpoint, context engineering, memory, model routing, MCP/Skill/Plugin, long-running/durable execution, parallel tools, multi-agent, HITL.
-
-### Reliability / Evaluation / Observability / Security
-structured output, failure taxonomy, retry/recovery, task/tool success, regression eval, trace/log/metrics, latency/token/cost, OpenTelemetry/Langfuse-class tooling, auth/permission, prompt injection, tool abuse, audit, sandbox/isolation.
-
-### Infra
-Docker, CI/CD, cloud, Kubernetes, worker/scheduler, autoscaling, distributed runtime, sandbox/container isolation.
+Maintain a de-duplicated capability matrix covering programming/CS, backend, RAG/context, Agent, reliability/eval/observability/security, and infra.
 
 ---
 
@@ -93,8 +67,6 @@ Every capability uses these states:
 - `未实现 / Roadmap`
 
 A skill appearing in a JD or document does **not** mean it has been implemented.
-
-Before changing README/project claims, verify code path + tests + evaluation evidence.
 
 Recommended pipeline:
 
@@ -138,46 +110,21 @@ why the problem exists
 → how to explain it
 ```
 
-The current textbook uses `data/tutorial/expense_policy.md` as a single fictional public case. Prefer extending that same case over inventing unrelated examples in every chapter.
+The current textbook uses `data/tutorial/expense_policy.md` as a single fictional public case. Prefer extending that same case over unrelated examples.
 
-### Visual pedagogy is a requirement, not decoration
-
-Use GitHub-native Mermaid when a concept benefits from structure or flow. Prefer diagrams for:
-
-- RAG ingestion/retrieval/generation flow
-- sparse vs dense vs fusion vs rerank
-- LangGraph state transitions
-- Tool Calling / Registry / validation / timeout
-- State vs Checkpoint vs History vs Memory vs Context
-- API/SSE request lifecycle
-- queue/worker/durable task
-- retry/deadline/failure paths
-- permission/HITL/sandbox boundaries
-- eval/trace/observability
-- backend system design
-
-Do not copy diagrams or images from external tutorials. Learn from good official explanations, then redraw concepts around this repository.
-
-Every major concept should move the learner through four levels:
-
-1. `看懂` — explain it in their own words.
-2. `能跑` — reproduce a real repository path/test/CLI.
-3. `能改` — change a parameter or implementation and explain the effect.
-4. `能独立实现` — build a small version from a blank file.
-
-Teach first; practice second; test/quiz last. Never use an unimplemented capability as if the project already supports it.
+Use GitHub-native Mermaid when it genuinely reduces cognitive load. Every major concept should move the learner through four levels: 看懂 → 能跑 → 能改 → 能独立实现.
 
 ---
 
 ## 5. Interview/algorithm rule
 
-`docs/INTERVIEW_ALGORITHMS.md` must be a **self-contained textbook + problem book**, not merely a list of LeetCode numbers or external links.
+`docs/INTERVIEW_ALGORITHMS.md` must be a **self-contained textbook + problem book**, not a list of numbers or links.
 
-It should train the complete interview stack for Agent Backend / AI Application roles:
+It trains:
 
 ```text
 Hot 100 patterns
-+ company-frequency algorithm supplements
++ company-frequency supplements
 + ACM input/output
 + SQL
 + backend hand-coding
@@ -189,95 +136,93 @@ Hot 100 patterns
 
 ### 5.1 Review the user's starred algorithm repositories first
 
-When local GitHub CLI/auth is available, inspect the authenticated user's starred repositories before changing the algorithm curriculum:
+When local GitHub CLI/auth is available:
 
 ```bash
 gh api --paginate user/starred --jq '.[].full_name'
 ```
 
-Filter for LeetCode / algorithms / interview / CodeTop / Hot100 / data-structures repositories and record which ones materially influenced the curriculum. If `gh` or star access is unavailable, state that explicitly instead of pretending the starred list was reviewed.
+Filter LeetCode / algorithms / interview / CodeTop / Hot100 / data-structures repos and record which materially influenced the curriculum. If star access is unavailable, say so explicitly.
 
-Also refresh high-quality public references. Current examples worth comparing include:
+Also compare high-quality public references such as:
 
-- `labuladong/fucking-algorithm` — pattern-first reasoning, visual explanation, spaced practice.
-- `doocs/leetcode` — broad coverage, topic indexing, searchable per-problem explanations.
-- `Hubert-hwk/hot100-judge` — Hot100 + CodeTop frequency, ACM/core-code dual mode, local tests/progress.
-- `leetcode-go/top-interview-150` — topic-based interview organization.
+- `labuladong/fucking-algorithm` — pattern-first reasoning and derivation.
+- `doocs/leetcode` — breadth, topic indexing, per-problem lookup.
+- `Hubert-hwk/hot100-judge` — Hot100 + CodeTop + ACM/core mode + tests.
+- `leetcode-go/top-interview-150` — interview-oriented topic organization.
 
-These are **reference designs**, not sources to copy. Paraphrase problem statements, write original explanations/code/examples, and keep attribution/links where a reference materially influenced structure.
+Reference structure, do not copy explanations or problem text.
 
-### 5.2 Every included algorithm problem must be self-contained
+### 5.2 Hot100 coverage and languages
 
-For every problem retained in the study route, include inside the document:
+The canonical target is **Hot100 100/100 coverage**. Every Hot100 problem retained in the canonical curriculum must eventually have both:
+
+- complete Python solution
+- complete Java solution
+
+Hot100 is the foundation, not the whole interview syllabus. Keep company-frequency supplements, ACM, SQL, backend hand-coding, CS, system design and AI coding.
+
+### 5.3 Every problem must teach the derivation, not just present an answer
+
+A learner saying “I read the explanation but still could not derive it myself” means the explanation is insufficient.
+
+For every canonical problem, use this teaching order:
 
 ```text
-problem number/title + type/pattern + priority
-→ original paraphrased task description (not copied LeetCode text)
-→ small original example
-→ recognition signals
-→ brute-force baseline when educationally useful
-→ optimal idea / invariant
-→ diagram when useful
-→ complete Python solution
-→ time/space complexity
-→ common mistakes
-→ at least one variant/follow-up
-→ backend/Agent transfer when relevant
-→ review checkpoint
+1. 题型 / 优先级 / 前置知识
+2. 自写题意 + 原创例子
+3. 第一反应：最直接的暴力解是什么？
+4. 暴力解哪里慢 / 哪里重复？
+5. 从例子中观察出什么规律？
+6. 为什么这个规律允许换成当前数据结构/算法？
+7. 核心不变量：循环过程中始终保证什么？
+8. 手推一遍：至少 4–8 个关键状态变化
+9. Python 完整代码
+10. Python 逐段/关键行解释
+11. Java 完整代码
+12. Java 关键 API / 数据结构解释
+13. 用同一个例子 dry-run 代码
+14. 时间复杂度为什么是这个量级
+15. 空间复杂度
+16. 最常见错误：错误写法为什么错
+17. 面试官改变条件后怎么重新推导
+18. 同类题如何识别
+19. Backend / Agent 工程迁移（适用时）
+20. 一句话复述 + 闭卷重写验收
 ```
 
-A learner should not need to open LeetCode to understand the task or solution. External links are optional verification/reference only.
+Do **not** jump from problem statement directly to the optimal trick. The derivation from brute force to optimization is the lesson.
 
-### 5.3 Readability and visual consistency are hard requirements
+For difficult concepts (DP, monotonic stack, graph, binary search boundaries, linked-list pointer rewiring), include a state table or Mermaid diagram when useful.
 
-The algorithm textbook can be very long, but it must never look like an unstructured Markdown dump.
+### 5.4 Readability and visual consistency are hard requirements
 
-Use one stable page hierarchy:
+The textbook can be very long but must remain navigable:
 
 ```text
 Top-level title
-→ quick-start / legend / table of contents
+→ quick-start / legend / clickable index
 → Part
 → topic overview
-→ one pattern diagram
+→ one useful pattern diagram
 → collapsible problem cards
 → topic summary / transfer
 → review checklist
 ```
 
-Formatting rules:
+Rules:
 
-- Keep a clickable table of contents or compact topic index near the top.
-- Move reference-source notes and maintenance details to an appendix; do not put them before the actual learning path.
-- Use `<details><summary>...</summary>` for individual problem solutions so 50–100+ problems remain browsable.
-- Every problem summary uses one format, e.g. `LC 76 · Minimum Window Substring · Sliding Window · P0`.
-- Use `P0 / P1 / P2` consistently; define the legend once instead of explaining it repeatedly.
-- Put `题意 / 例子 / 识别 / 思路 / 代码 / 复杂度 / 易错 / 追问 / 工程迁移` in the same order for every problem.
-- Avoid excessive emoji, decorative badges, nested heading noise and giant unbroken tables.
-- Prefer short paragraphs, small tables and Mermaid only when they reduce cognitive load.
-- Do not show multiple similar diagrams for the same pattern; one good diagram is better than decoration.
-- Keep code blocks immediately next to the explanation they support.
-- At the end of each topic, include a compact “这一类你应该会什么” checklist.
-- Maintain enough whitespace between cards/sections so GitHub rendering is comfortable on desktop and mobile.
+- Use `<details><summary>...</summary>` for individual problems.
+- One summary format: `LC 76 · Minimum Window Substring · Sliding Window · P0`.
+- Keep fields in the same order for every problem.
+- Avoid decorative noise, excessive emoji, duplicate diagrams and giant tables.
+- Put code immediately beside the explanation it supports.
+- End each topic with “这一类你应该会什么”.
+- A learner should find any topic/problem in under 30 seconds.
 
-Before handoff, visually inspect the rendered Markdown on GitHub when possible. The acceptance question is not only “is the content complete?” but also “can a learner find the right topic/problem in under 30 seconds?”
+### 5.5 Interview transfer
 
-For each algorithm family, prefer:
-
-```text
-recognition signal
-→ visual model
-→ core invariant
-→ template
-→ fully explained representative problems
-→ common mistakes
-→ complexity
-→ variants
-→ backend/Agent transfer
-→ spaced re-write standard
-```
-
-Explicitly connect algorithms to engineering where useful, for example:
+Explicitly connect algorithms to engineering where useful:
 
 - Sliding Window → rate limiting
 - Heap → TopK / priority tasks
@@ -285,12 +230,12 @@ Explicitly connect algorithms to engineering where useful, for example:
 - LRU → caches
 - Queue → workers/backpressure
 
-Keep the question set driven by current interview evidence, not by arbitrary total problem count.
+Keep the set driven by current interview evidence, not arbitrary problem count.
 
 ---
 
 ## 6. Safety / repository hygiene
 
-Never commit `.env`, API keys/tokens, private documents, user uploads, local databases/vector data, model caches, or other personal data.
+Never commit `.env`, API keys/tokens, private documents, user uploads, local databases/vector data, model caches, or personal data.
 
-Do not rewrite stable code solely to look more sophisticated. When handing off, state exactly what remains unsupported.
+Do not rewrite stable code solely to look sophisticated. Handoffs must state exactly what remains unsupported.
